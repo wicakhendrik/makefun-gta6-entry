@@ -64,6 +64,7 @@ const { result: { sessionId } } = await send('Target.attachToTarget', { targetId
 const errors: string[] = [];
 listeners.push((msg) => {
   if (msg.sessionId !== sessionId) return;
+  if (msg.method === 'Runtime.consoleAPICalled' && msg.params.args[0]?.value === '[test]') console.log('  ' + msg.params.args.map((a: any) => a.value ?? a.description).join(' '));
   if (msg.method === 'Runtime.consoleAPICalled' && (msg.params.type === 'error' || msg.params.type === 'warning')) {
     errors.push(msg.params.type + ': ' + msg.params.args.map((a: any) => a.value ?? a.description).join(' '));
   }

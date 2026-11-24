@@ -6,6 +6,8 @@ import { formatClock } from '../engine/environment.js';
 import { DISTRICTS, districtAt, POI } from '../world/city.js';
 import { CONTACTS } from '../story/script.js';
 import { RACES, TOKEN_SPOTS } from '../story/activities.js';
+import { nearestNode, routeDir, DIRS, dirOfHeading } from '../world/roads.js';
+import { PITCH } from '../world/city.js';
 
 const FONT = '"Trebuchet MS", "Segoe UI", Arial, sans-serif';
 const DISPLAY = '"Arial Black", "Segoe UI Black", Impact, sans-serif';
@@ -111,6 +113,34 @@ export class Hud {
     return blips;
   }
 
+  /** Road-grid route from the player to the current objective, refreshed twice a second. */
+  gpsRoute() {
+    const g = this.game, p = g.player;
+    const obj = g.missions.objectivePos() || g.activities.raceTarget();
+    if (!obj) { this.route = null; return null; }
+    if (this.route && g.time - this.routeTime < 0.5 && this.routeFor === obj) return this.route;
+    this.routeTime = g.time; this.routeFor = obj;
+    let [i, j] = nearestNode(p.x, p.z);
+    const [ti, tj] = nearestNode(obj.x, obj.z);
+    let d = dirOfHeading(p.vehicle ? p.vehicle.heading : p.heading);
+    const pts = [[p.x, p.z], [i * PITCH, j * PITCH]];
+    for (let k = 0; k < 40 && (i !== ti || j !== tj); k++) {
+      d = routeDir(i, j, ti, tj, d);
+      i += DIRS[d][0]; j += DIRS[d][1];
+      pts.push([i * PITCH, j * PITCH]);
+    }
+    pts.push([obj.x, obj.z]);
+    this.route = pts;
+    return pts;
+  }
+
+  /** Where the police last saw the player, while they are searching. */
+  searchArea() {
+    const pol = this.game.police;
+    if (pol.stars === 0 || pol.unseen < 0.5) return null;
+    return { x: pol.lastSeen.x, z: pol.lastSeen.z, r: 40 + pol.unseen * 4 };
+  }
+
   draw() {
     const g = this.game, ctx = this.ctx, p = g.player;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -118,6 +148,10 @@ export class Hud {
     if (!this.visible || g.state === 'title') return;
     const W = this.w, H = this.h;
 
+    // cinematic vignette
+    const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.72);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(10,0,20,0.38)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
     // damage vignette
     const low = p.hp < 30 ? (0.35 + Math.sin(g.time * 6) * 0.15) : 0;
     const v = Math.max(this.hurt, low);
@@ -129,7 +163,7 @@ export class Hud {
 
     const ms = Math.round(Math.min(230, Math.max(170, H * 0.3)));
     const mx = 22, my = H - ms - 46;
-    this.minimap.draw(ctx, g, mx, my, ms, this.collectBlips());
+    this.minimap.draw(ctx, g, mx, my, ms, this.collectBlips(), this.gpsRoute(), this.searchArea());
     this.drawVitals(mx, my + ms + 8, ms);
     this.drawTopRight(W);
     if (p.vehicle) this.drawSpeedo(W, H);

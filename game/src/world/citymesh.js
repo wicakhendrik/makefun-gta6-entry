@@ -12,34 +12,52 @@ const GROUND_BY_DISTRICT = {
   mercado: '#cbb28c', docks: '#8b8881', park: '#5f9e45',
 };
 
+const CHUNK = 160;
+
+/** Geometry split into square chunks so the renderer can skip what is behind the camera or outside the shadow. */
+class ChunkSet {
+  constructor() { this.map = new Map(); this.global = new MeshBuilder(); }
+  at(x, z) {
+    const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK), key = cx + ',' + cz;
+    let b = this.map.get(key);
+    if (!b) { b = new MeshBuilder(); b.cx = cx; b.cz = cz; this.map.set(key, b); }
+    return b;
+  }
+  build() {
+    const chunks = [...this.map.values()].filter((b) => b.vertexCount > 0).map((b) => ({ built: b.build(), x: (b.cx + 0.5) * CHUNK, z: (b.cz + 0.5) * CHUNK, radius: CHUNK * 0.75 }));
+    return { global: this.global.build(), chunks };
+  }
+}
+
 export function buildCityMeshes(city) {
-  const m = new MeshBuilder();
+  const cs = new ChunkSet();
+  const at = (x, z) => cs.at(x, z);
   const rng = makeRng(99);
-  buildGround(m);
-  buildRoads(m);
-  for (const lot of city.lots) buildLot(m, lot);
-  for (const b of city.buildings) buildBuilding(m, b, rng);
-  for (const h of city.houses) buildHouse(m, h);
-  for (const p of city.pools) buildPool(m, p);
-  for (const h of city.hedges) buildHedge(m, h);
-  for (const n of city.neon) buildNeon(m, n);
-  for (const a of city.awnings) buildAwning(m, a);
-  for (const b of city.billboards) buildBillboard(m, b);
-  for (const p of city.palms) buildPalm(m, p.x, p.z, p.h, p.lean, rng);
-  for (const t of city.trees) buildTree(m, t);
-  for (const l of city.lamps) buildLamp(m, l);
-  for (const u of city.umbrellas) buildUmbrella(m, u);
-  for (const l of city.loungers) { m.at(l.x, 0, l.z, l.yaw); m.cbox(0, 0.05, 0, 0.8, 0.35, 2.0, C('#f4f4f0')); m.at(0, 0, 0); }
-  for (const h of city.huts) buildLifeguardHut(m, h);
-  for (const c of city.containers) buildContainer(m, c);
-  for (const c of city.cranes) buildCrane(m, c);
-  for (const f of city.fountains) buildFountain(m, f);
-  for (const b of city.benches) { m.cbox(b.x, 0.16, b.z, 2.2, 0.5, 0.7, C('#7a5a3a')); }
-  buildEdgeGreenery(m, rng);
-  buildFreighter(m);
-  buildPier(m);
+  buildGround(cs.global);
+  buildRoads(cs);
+  for (const lot of city.lots) buildLot(at((lot.x0 + lot.x1) / 2, (lot.z0 + lot.z1) / 2), lot);
+  for (const b of city.buildings) buildBuilding(at((b.x0 + b.x1) / 2, (b.z0 + b.z1) / 2), b, rng);
+  for (const h of city.houses) buildHouse(at((h.x0 + h.x1) / 2, (h.z0 + h.z1) / 2), h);
+  for (const p of city.pools) buildPool(at((p.x0 + p.x1) / 2, (p.z0 + p.z1) / 2), p);
+  for (const h of city.hedges) buildHedge(at((h.x0 + h.x1) / 2, (h.z0 + h.z1) / 2), h);
+  for (const n of city.neon) buildNeon(at((n.b.x0 + n.b.x1) / 2, (n.b.z0 + n.b.z1) / 2), n);
+  for (const a of city.awnings) buildAwning(at((a.b.x0 + a.b.x1) / 2, (a.b.z0 + a.b.z1) / 2), a);
+  for (const b of city.billboards) buildBillboard(at((b.b.x0 + b.b.x1) / 2, (b.b.z0 + b.b.z1) / 2), b);
+  for (const p of city.palms) buildPalm(at(p.x, p.z), p.x, p.z, p.h, p.lean, rng);
+  for (const t of city.trees) buildTree(at(t.x, t.z), t);
+  for (const l of city.lamps) buildLamp(at(l.x, l.z), l);
+  for (const u of city.umbrellas) buildUmbrella(at(u.x, u.z), u);
+  for (const l of city.loungers) { const m = at(l.x, l.z); m.at(l.x, 0, l.z, l.yaw); m.cbox(0, 0.05, 0, 0.8, 0.35, 2.0, C('#f4f4f0')); m.at(0, 0, 0); }
+  for (const h of city.huts) buildLifeguardHut(at(h.x, h.z), h);
+  for (const c of city.containers) buildContainer(at(c.x, c.z), c);
+  for (const c of city.cranes) buildCrane(at(c.x, c.z), c);
+  for (const f of city.fountains) buildFountain(at(f.x, f.z), f);
+  for (const b of city.benches) at(b.x, b.z).cbox(b.x, 0.16, b.z, 2.2, 0.5, 0.7, C('#7a5a3a'));
+  buildEdgeGreenery(cs, rng);
+  buildFreighter(cs.global);
+  buildPier(cs.global);
   const ferris = buildFerrisWheel();
-  return { city: m.build(), ferris, ferrisCenter: [PIER.x1 - 30, 26, (PIER.z0 + PIER.z1) / 2] };
+  return { ...cs.build(), ferris, ferrisCenter: [PIER.x1 - 30, 26, (PIER.z0 + PIER.z1) / 2] };
 }
 
 function buildGround(m) {
@@ -54,7 +72,8 @@ function buildGround(m) {
   m.box(LAND.x0, 0, LAND.z1 - 0.6, BEACH_X0, 0.25, LAND.z1, C('#e0b030'));
 }
 
-function buildRoads(m) {
+function buildRoads(cs) {
+  const m = cs.global;
   const asphalt = C('#3b3e45');
   const yellow = C('#f2c230'), white = C('#ecece6');
   const span0 = -ROAD / 2, span1 = CITY_MAX + ROAD / 2;
@@ -67,17 +86,19 @@ function buildRoads(m) {
     const c = roadCoord(i);
     for (let k = 0; k < BLOCKS; k++) {
       const a = k * PITCH + ROAD / 2 + 2, b = (k + 1) * PITCH - ROAD / 2 - 2;
+      const mk = cs.at((a + b) / 2, c);
+      const mv = cs.at(c, (a + b) / 2);
       // double yellow centre line
-      m.plane(a, c - 0.3, b, c - 0.12, 0.04, yellow);
-      m.plane(a, c + 0.12, b, c + 0.3, 0.04, yellow);
-      m.plane(c - 0.3, a, c - 0.12, b, 0.04, yellow);
-      m.plane(c + 0.12, a, c + 0.3, b, 0.04, yellow);
+      mk.plane(a, c - 0.3, b, c - 0.12, 0.04, yellow);
+      mk.plane(a, c + 0.12, b, c + 0.3, 0.04, yellow);
+      mv.plane(c - 0.3, a, c - 0.12, b, 0.04, yellow);
+      mv.plane(c + 0.12, a, c + 0.3, b, 0.04, yellow);
       // dashed lane edges
       for (let t = a + 2; t < b - 3; t += 7) {
-        m.plane(t, c - 5.0, t + 3, c - 4.8, 0.04, white);
-        m.plane(t, c + 4.8, t + 3, c + 5.0, 0.04, white);
-        m.plane(c - 5.0, t, c - 4.8, t + 3, 0.04, white);
-        m.plane(c + 4.8, t, c + 5.0, t + 3, 0.04, white);
+        mk.plane(t, c - 5.0, t + 3, c - 4.8, 0.04, white);
+        mk.plane(t, c + 4.8, t + 3, c + 5.0, 0.04, white);
+        mv.plane(c - 5.0, t, c - 4.8, t + 3, 0.04, white);
+        mv.plane(c + 4.8, t, c + 5.0, t + 3, 0.04, white);
       }
     }
   }
@@ -85,6 +106,7 @@ function buildRoads(m) {
   for (let i = 0; i <= BLOCKS; i++) {
     for (let j = 0; j <= BLOCKS; j++) {
       const x = roadCoord(i), z = roadCoord(j);
+      const m = cs.at(x, z);
       for (let s = -ROAD / 2 + 1; s < ROAD / 2 - 1; s += 1.6) {
         m.plane(x + s, z - ROAD / 2 - 3.2, x + s + 0.8, z - ROAD / 2 - 0.4, 0.045, white);
         m.plane(x + s, z + ROAD / 2 + 0.4, x + s + 0.8, z + ROAD / 2 + 3.2, 0.045, white);
@@ -232,13 +254,13 @@ function buildBillboard(m, bb) {
 }
 
 export function buildPalm(m, x, z, h, lean, rng) {
-  const trunk = C('#8c6c4c'), seg = 5;
+  const trunk = C('#8c6c4c'), seg = 4;
   let px = x, pz = z, py = 0.15;
   const lx = Math.cos(lean * 7) * lean, lz = Math.sin(lean * 7) * lean;
   for (let k = 0; k < seg; k++) {
     const t = k / seg, sh = h / seg;
     const nx = px + lx * sh * (0.4 + t), nz = pz + lz * sh * (0.4 + t);
-    m.cylinder(px, py, pz, 0.32 - t * 0.1, 0.3 - t * 0.1, sh + 0.05, 6, shade(trunk, 0.9 + (k % 2) * 0.12));
+    m.cylinder(px, py, pz, 0.32 - t * 0.1, 0.3 - t * 0.1, sh + 0.05, 5, shade(trunk, 0.9 + (k % 2) * 0.12), MAT.MATTE, false);
     px = nx; pz = nz; py += sh;
   }
   const leaf = C('#3f8f3a');
@@ -291,7 +313,7 @@ function buildContainer(m, c) {
     const tint = shade(col, 0.85 + ((s * 7 + Math.floor(c.x)) % 3) * 0.08);
     m.at(c.x, s * 2.6, c.z, c.yaw);
     m.cbox(0, 0, 0, c.len, 2.55, 2.4, tint);
-    for (let r = -c.len / 2 + 0.4; r < c.len / 2; r += 0.6) m.cbox(r, 0.05, 1.2, 0.08, 2.45, 0.06, shade(tint, 0.8));
+    for (let r = -c.len / 2 + 0.5; r < c.len / 2; r += 1.0) m.box(r - 0.05, 0.05, 1.2, r + 0.05, 2.5, 1.26, shade(tint, 0.8), MAT.MATTE, { noBottom: true });
   }
   m.at(0, 0, 0);
 }
@@ -313,11 +335,13 @@ function buildFountain(m, f) {
   m.cylinder(f.x, 2.5, f.z, 1.2, 0.2, 0.4, 8, C('#d8d0c0'));
 }
 
-function buildEdgeGreenery(m, rng) {
+function buildEdgeGreenery(cs, rng) {
   // mangrove-like scrub along the north and west shores
   for (let t = -30; t < CITY_MAX + 10; t += 9) {
-    buildTree(m, { x: t + rng.range(-2, 2), z: -26 + rng.range(-4, 4), h: rng.range(5, 8), r: rng.range(2.5, 3.8) });
-    buildTree(m, { x: -26 + rng.range(-4, 4), z: t + rng.range(-2, 2), h: rng.range(5, 8), r: rng.range(2.5, 3.8) });
+    const a = { x: t + rng.range(-2, 2), z: -26 + rng.range(-4, 4), h: rng.range(5, 8), r: rng.range(2.5, 3.8) };
+    const b = { x: -26 + rng.range(-4, 4), z: t + rng.range(-2, 2), h: rng.range(5, 8), r: rng.range(2.5, 3.8) };
+    buildTree(cs.at(a.x, a.z), a);
+    buildTree(cs.at(b.x, b.z), b);
   }
 }
 

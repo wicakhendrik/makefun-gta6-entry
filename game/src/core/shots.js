@@ -85,8 +85,10 @@ export const SHOTS = {
     g.missions.done = new Set(['homecoming', 'special_order', 'debt_collector']);
     startMissionAt(g, 'pier9', 3, [1]);
     const p = g.player;
-    p.x = POI.warehouse.x - 6; p.z = POI.warehouse.z - 16; p.heading = 0.25;
-    g.camera.yaw = 0.25; g.camera.pitch = 0.08;
+    p.x = POI.warehouse.x - 26; p.z = POI.warehouse.z - 8; p.heading = 1.1;
+    g.camera.yaw = 1.1; g.camera.pitch = 0.1;
+    const wreck = g.spawnVehicle('bayside', POI.warehouse.x + 4, POI.warehouse.z - 5, 1.2, '#18181c');
+    wreck.health = 0; wreck.state = 'burning'; wreck.burnTime = 0.85; wreck.killedBy = p;
     for (let k = 0; k < 10; k++) g.peds.spawnPed(30, 90);
     const goons = g.humans.filter((h) => h.role === 'goon');
     for (const h of goons) h.ai.mode = 'fight';
@@ -94,12 +96,13 @@ export const SHOTS = {
     g.autopilot = () => { p.hp = 82; p.wantX = 0; p.wantZ = 0; };
     simulate(g, 1.0);
     g.autopilot = null;
-    p.x = POI.warehouse.x - 6; p.z = POI.warehouse.z - 16; p.hitFlash = 0;
+    p.x = POI.warehouse.x - 26; p.z = POI.warehouse.z - 8; p.hitFlash = 0;
     g.fx.p = g.fx.p.filter((q) => q.kind !== 'blood');
     g.camera.aiming = false;
-    g.camera.yaw = 0.3; g.camera.pitch = 0.2; g.camera.lookTimer = 99;
+    g.camera.yaw = 1.1; g.camera.pitch = 0.16; g.camera.lookTimer = 99;
     g.camera.update(1, g);
-    p.heading = 0.3;
+    p.heading = 1.1;
+    g.police.clear();
     const target = goons.find((h) => h.state !== 'dead');
     const eye = g.camera.eye;
     if (target) {
@@ -110,23 +113,41 @@ export const SHOTS = {
     g.hud.hitMarker = 0.3;
   },
 
-  /** Night on the Strand: neon, lamps, police lights and officers closing in. */
+  /** Night on the Strand: neon, lamps, and a pursuit with the light bars lighting up the street. */
   night(g) {
     g.hour = 21.4;
     g.money = 23400;
     g.player.weapons = new Set(['pistol', 'smg', 'shotgun']); g.player.ammo = { pistol: 60, smg: 90, shotgun: 24 }; g.player.weapon = 'shotgun';
     g.missions.done = new Set(['homecoming', 'special_order', 'debt_collector', 'pier9']);
     startMissionAt(g, 'clean_hands', 8);
-    const [x, z] = lanePoint(10, 4, 1, 40);
-    putPlayerInCar(g, 'ranchero', x, z, headingOfDir(1), '#2f3f5c', 14);
+    const [x, z] = lanePoint(10, 7, 3, 60);
+    g.vehicles = g.vehicles.filter((v) => Math.hypot(v.x - x, v.z - z) > 45);
+    putPlayerInCar(g, 'vanta', x, z, headingOfDir(3), '#ffcc22', 18);
     g.police.setMinStars(2);
-    for (const dz of [-20, -38]) { const v = g.police.spawnUnit(); v.x = x - 1; v.z = z + dz; v.heading = headingOfDir(1); v.vz = 14; v.ai.i = 10; v.ai.j = 4; v.ai.d = 1; }
+    for (const [dz, dx] of [[14, -2.5], [30, 2.5]]) { const v = g.police.spawnUnit(); v.x = x + dx; v.z = z + dz; v.heading = headingOfDir(3); v.vz = -18; v.ai.i = 10; v.ai.j = 7; v.ai.d = 3; }
     for (let k = 0; k < 14; k++) g.traffic.spawnCar(25, 150);
     for (let k = 0; k < 30; k++) g.peds.spawnPed(6, 70);
-    g.autopilot = () => { const v = g.player.vehicle; if (v) { v.input.throttle = v.speed < 16 ? 0.8 : 0; v.input.steer = (x - v.x) * 0.05; } };
-    simulate(g, 1.4);
-    g.camera.lookTimer = 0;
+    g.autopilot = () => { const v = g.player.vehicle; if (v) { v.input.throttle = v.speed < 18 ? 0.8 : 0; v.input.steer = (x - v.x) * -0.05; } };
+    simulate(g, 1.2);
+    g.camera.yaw = 0.45; g.camera.pitch = 0.14; g.camera.lookTimer = 99;
+    g.camera.update(1, g);
   },
+};
+
+/** Debug view: traffic and pedestrians around a junction seen from above after half a minute of simulation. */
+SHOTS.overhead = (g) => {
+  g.hour = 13;
+  const p = g.player;
+  p.x = 560; p.z = 560;
+  for (let k = 0; k < 30; k++) g.traffic.spawnCar(10, 150);
+  for (let k = 0; k < 40; k++) g.peds.spawnPed(5, 80);
+  simulate(g, 25);
+  g.camera.update = function () { this.eye = [p.x + 1, 75, p.z + 40]; this.target = [p.x, 0, p.z]; this.fov = 1.1; };
+  g.camera.update();
+  const stuck = g.vehicles.filter((v) => v.ai && v.ai.kind === 'traffic' && v.speed < 0.5).length;
+  const moving = g.vehicles.filter((v) => v.ai && v.ai.kind === 'traffic').length;
+  const damaged = g.vehicles.filter((v) => v.ai && v.health < v.spec.hp * 0.7).length;
+  console.log('[test]', 'traffic', moving, 'stopped', stuck, 'damaged', damaged);
 };
 
 export function runShot(g, name) {

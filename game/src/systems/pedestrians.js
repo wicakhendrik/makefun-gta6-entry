@@ -10,7 +10,7 @@ export class PedestrianSystem {
   constructor(game) {
     this.game = game;
     this.rng = makeRng(777);
-    this.maxPeds = 46;
+    this.maxPeds = 64;
     game.events.on('gunfire', (shooter, x, z) => this.scare(x, z, 38, shooter));
     game.events.on('humanKilled', (h) => this.scare(h.x, h.z, 22, h.lastAttacker));
     game.events.on('explosion', (x, z) => this.scare(x, z, 50, null));
@@ -64,7 +64,7 @@ export class PedestrianSystem {
     }
     g.humans = g.humans.filter((h) => !h.gone);
     const want = g.isNight ? this.maxPeds * 0.6 : this.maxPeds;
-    for (let k = 0; alive < want && k < 3; k++) if (this.spawnPed(alive < 10 ? 25 : 70, 160)) alive++;
+    for (let k = 0; alive < want && k < 3; k++) if (this.spawnPed(alive < 20 ? 22 : 45, 150)) alive++;
   }
 
   think(h, dt) {

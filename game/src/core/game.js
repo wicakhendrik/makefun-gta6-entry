@@ -74,13 +74,18 @@ export class Game {
     this.applySettings();
     this.wireStats();
     this.traffic.spawnParked();
+    // Esc releases the mouse in the browser before the page sees the key: treat that as "pause"
+    document.addEventListener('pointerlockchange', () => {
+      if (!document.pointerLockElement && this.state === 'playing' && this.input.wantLock && !this.shotMode) this.pause();
+    });
   }
 
   buildMeshes() {
     const r = this.renderer;
     const cm = buildCityMeshes(this.city);
     this.meshes = {
-      city: r.upload(cm.city), ferris: r.upload(cm.ferris), ferrisCenter: cm.ferrisCenter,
+      cityGlobal: r.upload(cm.global), ferris: r.upload(cm.ferris), ferrisCenter: cm.ferrisCenter,
+      chunks: cm.chunks.map((c) => ({ mesh: r.upload(c.built), x: c.x, z: c.z, radius: c.radius })),
       heli: r.upload(buildHelicopterMesh()), rotor: r.upload(buildRotorMesh()),
       vehicles: {}, civilians: [],
     };
@@ -265,7 +270,8 @@ export class Game {
     dt = Math.min(dt, 0.1);
     this.renderer.resize();
     this.hud.resize();
-    if (this.input.pressed('KeyF') || this.input.clicks[0]) this.audio.unlock();
+    if (this.input.hits.size || this.input.clicks[0]) this.audio.unlock();
+    if (this.state === 'title' && this.audio.ctx && !this.radio.on) this.radio.playTitle();
     this.handleGlobalKeys();
     this.menus.update();
     if ((this.state === 'playing' || this.state === 'dead') && !this.frozen) {
@@ -306,6 +312,7 @@ export class Game {
     } else {
       this.playerCtl.update(dt);
       if (this.autopilot) this.autopilot(dt);
+      this.hint = this.playerCtl.nearbyHint();
     }
     const px = p.x, pz = p.z;
     for (const v of this.vehicles) {
@@ -348,7 +355,7 @@ export class Game {
     const right = [-f[2] / rl, 0, f[0] / rl];
     const upN = [-right[2] * f[1], right[2] * f[0] - right[0] * f[2], right[0] * f[1]];
 
-    r.draw(this.meshes.city, this.identity);
+    this.drawCity(r, focus, eye, f);
     const fc = this.meshes.ferrisCenter;
     r.draw(this.meshes.ferris, modelEuler(this.tmp, fc[0], fc[1], fc[2], Math.PI / 2, 0, this.ferrisAngle));
     this.drawVehicles(r, env, right, upN, eye);
@@ -362,6 +369,22 @@ export class Game {
     if (this.state !== 'title') this.activities.render(r, right, upN);
     r.render(env, this.time);
     this.hud.draw();
+  }
+
+  /** Static city chunks: skip those behind the camera; only chunks near the focus cast shadows. */
+  drawCity(r, focus, eye, f) {
+    r.draw(this.meshes.cityGlobal, this.identity);
+    const fl = Math.hypot(f[0], f[2]) || 1;
+    const fx = f[0] / fl, fz = f[2] / fl;
+    for (const c of this.meshes.chunks) {
+      const dx = c.x - eye[0], dz = c.z - eye[2];
+      const d = Math.hypot(dx, dz);
+      if (d > 1000 + c.radius) continue;
+      const ahead = dx * fx + dz * fz;
+      if (ahead < -c.radius - 30 && f[1] > -0.8) continue;
+      const shadow = Math.abs(c.x - focus[0]) < 210 && Math.abs(c.z - focus[1]) < 210;
+      r.draw(c.mesh, this.identity, null, 0, shadow);
+    }
   }
 
   drawVehicles(r, env, right, up, eye) {
@@ -416,6 +439,20 @@ export class Game {
     }
     near.sort((a, b) => a[0] - b[0]);
     for (let k = 0; k < Math.min(near.length, 6); k++) r.addLight(near[k][1], 5.5, near[k][2], 15, 1.2 * env.night, 0.9 * env.night, 0.5 * env.night);
+    // neon halos along the Strand rooftops and blade signs
+    for (const n of this.city.neon) {
+      const b = n.b;
+      const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
+      if (dist2(cx, cz, p.x, p.z) > 260 * 260) continue;
+      const c1 = n.rgb || (n.rgb = [hexColor(n.color), hexColor(n.color2)]);
+      const k = env.night * 0.55;
+      for (let t = 0.1; t < 1; t += 0.2) {
+        const gx = b.x0 + (b.x1 - b.x0) * t, gz = b.z0 + (b.z1 - b.z0) * t;
+        for (const [qx, qz] of [[gx, b.z1 + 0.3], [gx, b.z0 - 0.3], [b.x0 - 0.3, gz], [b.x1 + 0.3, gz]]) r.billboard(qx, b.h - 0.6, qz, 2.0, c1[0][0] * k, c1[0][1] * k, c1[0][2] * k, 0, right, up);
+      }
+      const top = Math.min(b.h - 2, 13);
+      for (let y = 5; y < top; y += 2.2) r.billboard(b.x0 + 2.5, y, b.z1 + 1, 1.6, c1[1][0] * k, c1[1][1] * k, c1[1][2] * k, 0, right, up);
+    }
   }
 }
 

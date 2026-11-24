@@ -45,7 +45,7 @@ export class Minimap {
   }
 
   /** Rotating minimap in a rounded square at (x, y). */
-  draw(ctx, game, x, y, size, blips) {
+  draw(ctx, game, x, y, size, blips, route, search) {
     const p = game.player;
     const v = p.vehicle;
     const scale = v ? 0.75 - Math.min(v.speed, 50) * 0.006 : 0.95;
@@ -67,6 +67,24 @@ export class Minimap {
       return [cx + dx * cos - dz * sin, cy + dx * sin + dz * cos];
     };
     const half = size / 2 - 9;
+    if (search) {
+      const [sx, sy] = toScreen(search.x, search.z);
+      ctx.save();
+      roundRect(ctx, x, y, size, size, 14); ctx.clip();
+      ctx.beginPath(); ctx.arc(sx, sy, search.r * scale, 0, Math.PI * 2);
+      ctx.fillStyle = Math.floor(game.time * 3) % 2 ? 'rgba(255,60,80,0.22)' : 'rgba(60,110,255,0.22)'; ctx.fill();
+      ctx.restore();
+    }
+    if (route && route.length > 1) {
+      ctx.save();
+      roundRect(ctx, x, y, size, size, 14); ctx.clip();
+      ctx.beginPath();
+      route.forEach(([wx, wz], k) => { const [sx, sy] = toScreen(wx, wz); if (k) ctx.lineTo(sx, sy); else ctx.moveTo(sx, sy); });
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(20,20,10,0.6)'; ctx.lineWidth = 7; ctx.stroke();
+      ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 4; ctx.stroke();
+      ctx.restore();
+    }
     for (const b of blips) {
       let [sx, sy] = toScreen(b.x, b.z);
       const ox = sx - cx, oy = sy - cy;

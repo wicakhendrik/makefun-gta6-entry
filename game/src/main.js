@@ -2,6 +2,7 @@
 
 import { Game } from './core/game.js';
 import { runShot } from './core/shots.js';
+import { runSelfTest } from './core/selftest.js';
 
 function showFatal(err) {
   const box = document.createElement('div');
@@ -16,7 +17,8 @@ function boot() {
   window.solara = game;
   const shot = new URLSearchParams(location.search).get('shot');
   let readyIn = -1;
-  if (shot && runShot(game, shot)) readyIn = 3;
+  if (new URLSearchParams(location.search).has('selftest')) { runSelfTest(game); readyIn = 2; }
+  else if (shot && runShot(game, shot)) readyIn = 3;
   else game.toTitle();
   let last = performance.now();
   const loop = (now) => {

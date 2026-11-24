@@ -89,6 +89,20 @@ export class PlayerController {
     }
   }
 
+  /** Context hint for the HUD: which car F would take. */
+  nearbyHint() {
+    const g = this.game, p = this.p;
+    if (p.vehicle || !p.alive) return null;
+    let best = null, bd = 4.2 * 4.2;
+    for (const v of g.vehicles) {
+      if (v.state === 'wreck') continue;
+      const d = dist2(v.x, v.z, p.x, p.z);
+      if (d < bd + v.spec.len) { bd = d; best = v; }
+    }
+    if (!best) return null;
+    return (best.driver ? 'F — carjack the ' : 'F — steal the ') + best.spec.name;
+  }
+
   tryEnterVehicle() {
     const g = this.game, p = this.p;
     let best = null, bd = 4.2 * 4.2;

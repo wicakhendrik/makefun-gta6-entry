@@ -12,7 +12,7 @@ export class TrafficSystem {
   constructor(game) {
     this.game = game;
     this.rng = makeRng(4242);
-    this.maxCars = 28;
+    this.maxCars = 38;
     this.spawnTimer = 0;
   }
 
@@ -41,6 +41,9 @@ export class TrafficSystem {
     const g = this.game, p = g.player;
     const spot = randomLaneSpot(this.rng, p.x, p.z, minD, maxD);
     if (!spot) return null;
+    // avoid popping cars into view right in front of the camera
+    const cam = g.camera, ex = spot.x - cam.eye[0], ez = spot.z - cam.eye[2];
+    if (g.state === 'playing' && Math.hypot(ex, ez) < 120 && ex * Math.sin(cam.yaw) + ez * Math.cos(cam.yaw) > 0 && !g.shotMode) return null;
     for (const o of g.vehicles) if (dist2(o.x, o.z, spot.x, spot.z) < 100) return null;
     const type = typeKey || this.rng.pick(TRAFFIC_MIX);
     const v = new Vehicle(type, spot.x, spot.z, spot.heading, this.rng.pick(VEHICLE_TYPES[type].colors));
@@ -65,7 +68,7 @@ export class TrafficSystem {
     let count = 0;
     for (const v of g.vehicles) if (v.ai && v.ai.kind === 'traffic') count++;
     this.spawnTimer -= dt;
-    if (count < this.maxCars && this.spawnTimer <= 0) { this.spawnCar(); this.spawnTimer = 0.25; }
+    if (count < this.maxCars && this.spawnTimer <= 0) { this.spawnCar(count < this.maxCars * 0.6 ? 55 : 90, 210); this.spawnTimer = 0.2; }
 
     for (const v of g.vehicles) {
       if (!v.ai || v.ai.kind !== 'traffic') continue;
