@@ -176,7 +176,8 @@ export const SHOTS = {
     simulate(g, 1.2);
     g.camera.yaw = 0.5; g.camera.pitch = 0.16; g.camera.lookTimer = 99;
     g.camera.update(1, g);
-    heliInView(g, 46, -0.12, 0.17);
+    heliInView(g, 46, -0.1, 0.09);
+    { const h = g.police.heli; h.x = g.player.x - 3; h.z = g.player.z + 36; h.y = 15; h.heading = Math.atan2(g.player.x - h.x, g.player.z - h.z); }
     g.hud.showSong(g.radio.nowPlaying);
     sayNow(g, 'DET. MARR', 'Take it to my partner at the Halcyon Park fountain. Ninety seconds — Crane has eyes on this building.');
   },

@@ -56,6 +56,7 @@ export function buildCityMeshes(city) {
   buildEdgeGreenery(cs, rng);
   buildFreighter(cs.global);
   buildPier(cs.global);
+  buildMainlandSkyline(cs.global, makeRng(4242));
   const ferris = buildFerrisWheel();
   return { ...cs.build(), ferris, ferrisCenter: [PIER.x1 - 30, 26, (PIER.z0 + PIER.z1) / 2] };
 }
@@ -342,6 +343,42 @@ function buildEdgeGreenery(cs, rng) {
     const b = { x: -26 + rng.range(-4, 4), z: t + rng.range(-2, 2), h: rng.range(5, 8), r: rng.range(2.5, 3.8) };
     buildTree(cs.at(a.x, a.z), a);
     buildTree(cs.at(b.x, b.z), b);
+  }
+}
+
+/**
+ * The mainland across the bay: three strips of shore with dense tower clusters on the horizon (north, south and
+ * west), so every street view ends in a skyline. They have no colliders; fog turns them into hazy silhouettes.
+ */
+function buildMainlandSkyline(m, rng) {
+  const HAZE = ['#8fa6bc', '#a9b8c8', '#7c93ab', '#b9c4cf', '#6f86a0', '#9aa7b8', '#c4b8a8'];
+  const strips = [
+    { x0: -160, x1: 1180, z0: -420, z1: -300, along: 'x' },
+    { x0: -160, x1: 1060, z0: 1300, z1: 1420, along: 'x' },
+    { x0: -440, x1: -330, z0: -200, z1: 1200, along: 'z' },
+  ];
+  for (const st of strips) {
+    m.box(st.x0, -0.6, st.z0, st.x1, 1.2, st.z1, C('#5d6b5a'), MAT.MATTE, { noBottom: true });
+    const len = st.along === 'x' ? st.x1 - st.x0 : st.z1 - st.z0;
+    for (let a = 10; a < len - 10;) {
+      const t = a / len;
+      const core = Math.exp(-Math.pow((t - 0.55) / 0.18, 2));
+      const w = rng.range(14, 34), dpt = rng.range(14, 30);
+      const h = 18 + rng.range(10, 40) + core * rng.range(50, 150);
+      const off = rng.range(8, 110 - dpt);
+      const b = st.along === 'x'
+        ? { x0: st.x0 + a, x1: st.x0 + a + w, z0: st.z0 + off, z1: st.z0 + off + dpt }
+        : { x0: st.x0 + off, x1: st.x0 + off + dpt, z0: st.z0 + a, z1: st.z0 + a + w };
+      const col = C(rng.pick(HAZE));
+      const roof = shade(col, 0.7);
+      if (h > 90 && rng() < 0.6) {
+        const iw = (b.x1 - b.x0) * 0.18, id = (b.z1 - b.z0) * 0.18;
+        m.box(b.x0, 1, b.z0, b.x1, h * 0.7, b.z1, col, MAT.TOWER, { top: roof, noBottom: true });
+        m.box(b.x0 + iw, h * 0.7, b.z0 + id, b.x1 - iw, h, b.z1 - id, col, MAT.TOWER, { top: roof, noBottom: true });
+        m.cbox((b.x0 + b.x1) / 2, h, (b.z0 + b.z1) / 2, 0.9, 0.9, 0.9, C('#ff3030'), MAT.EMISSIVE);
+      } else m.box(b.x0, 1, b.z0, b.x1, h, b.z1, col, h > 50 ? MAT.TOWER : MAT.FACADE, { top: roof, noBottom: true });
+      a += w + rng.range(2, 12) * (1.2 - core);
+    }
   }
 }
 
