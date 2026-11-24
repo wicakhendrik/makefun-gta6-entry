@@ -90,7 +90,7 @@ export class Hud {
     if (!g.missions.active && !g.activities.race) {
       for (const m of g.missions.available()) {
         const c = CONTACTS[m.giver], poi = POI[c.poi];
-        blips.push({ x: poi.x, z: poi.z, letter: c.name.split(' ').pop()[0], color: rgb(c.color), edge: true });
+        blips.push({ x: poi.x, z: poi.z, letter: c.letter, color: rgb(c.color), edge: true });
       }
       for (const r of RACES) blips.push({ x: r.start.x, z: r.start.z, shape: 'diamond', color: '#4ab8ff', size: 4 });
     }

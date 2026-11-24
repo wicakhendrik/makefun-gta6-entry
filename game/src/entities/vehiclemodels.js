@@ -19,8 +19,23 @@ export function buildVehicleMesh(spec) {
   const ride = 0.28;
   const bodyTop = s === 'sports' ? 0.78 : s === 'van' ? H : s === 'limo' ? 0.95 : 0.98;
 
-  // lower body
-  m.box(-hw, ride, -hl, hw, bodyTop, hl, PAINT, MAT.PAINT, { noBottom: true });
+  // lower body: a full-height middle with a sloped bonnet and boot (vans stay boxy)
+  if (s === 'van') m.box(-hw, ride, -hl, hw, bodyTop, hl, PAINT, MAT.PAINT, { noBottom: true });
+  else {
+    const nose = s === 'sports' ? 0.75 : 0.6, tail = 0.45;
+    const noseDrop = s === 'sports' ? 0.2 : 0.16, tailDrop = 0.1;
+    m.box(-hw, ride, -hl + tail, hw, bodyTop, hl - nose, PAINT, MAT.PAINT, { noBottom: true });
+    m.box(-hw, ride, hl - nose, hw, bodyTop - noseDrop, hl, PAINT, MAT.PAINT, { noBottom: true });
+    m.box(-hw, ride, -hl, hw, bodyTop - tailDrop, -hl + tail, PAINT, MAT.PAINT, { noBottom: true });
+    m.wedge(-hw, hw, bodyTop - noseDrop, bodyTop, hl, hl - nose, PAINT, MAT.PAINT);
+    m.wedge(-hw, hw, bodyTop - tailDrop, bodyTop, -hl, -hl + tail, PAINT, MAT.PAINT);
+    // grille, door seams and mirrors
+    m.box(-hw + 0.6, ride + 0.25, hl, hw - 0.6, bodyTop - noseDrop - 0.08, hl + 0.03, TRIM);
+    for (const sx of [-1, 1]) {
+      m.box(sx * hw - 0.012, ride + 0.25, hl * 0.05, sx * hw + 0.012, bodyTop - 0.04, hl * 0.05 + 0.04, TRIM);
+      if (s !== 'sports' && s !== 'hatch') m.box(sx * hw - 0.012, ride + 0.25, -hl * 0.38, sx * hw + 0.012, bodyTop - 0.04, -hl * 0.38 + 0.04, TRIM);
+    }
+  }
   m.box(-hw - 0.02, ride, -hl + 0.1, hw + 0.02, ride + 0.22, hl - 0.1, PAINT_DARK, MAT.PAINT);
   // bumpers
   m.box(-hw + 0.05, ride - 0.05, hl - 0.05, hw - 0.05, ride + 0.25, hl + 0.12, TRIM);
@@ -75,9 +90,11 @@ export function buildVehicleMesh(spec) {
     m.box(-hw - 0.015, 0.7, -hl * 0.4, hw + 0.015, 0.8, hl * 0.4, C('#1a1a1a'));
   }
 
-  // wheels
+  // wheels, with dark arches so they read as set into the body
   const wr = s === 'van' || s === 'pickup' ? 0.4 : 0.34;
   const wz = hl * 0.66;
+  for (const sx of [-1, 1]) for (const z of [-wz, wz]) m.box(sx > 0 ? hw - 0.02 : -hw - 0.02, ride - 0.05, z - wr - 0.12, sx > 0 ? hw + 0.02 : -hw + 0.02, ride + wr * 1.1, z + wr + 0.12, TRIM);
+  if (s !== 'van') for (const sx of [-1, 1]) m.box(sx * (hw + 0.14) - 0.07, bodyTop + 0.05, (s === 'sports' ? hl * 0.12 : s === 'pickup' ? hl * 0.35 : s === 'hatch' ? hl * 0.25 : hl * 0.28) - 0.5, sx * (hw + 0.14) + 0.07, bodyTop + 0.2, (s === 'sports' ? hl * 0.12 : s === 'pickup' ? hl * 0.35 : s === 'hatch' ? hl * 0.25 : hl * 0.28) - 0.35, PAINT, MAT.PAINT);
   for (const x of [-hw + 0.14, hw - 0.14]) {
     for (const z of [-wz, wz]) {
       m.wheel(x, wr, z, wr, 0.3, 8, TYRE);

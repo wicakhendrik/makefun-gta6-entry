@@ -56,6 +56,8 @@ export const SHOTS = {
     // look back over the shoulder at the pursuit (mouse look)
     g.camera.yaw = -0.55; g.camera.pitch = 0.16; g.camera.lookTimer = 99;
     g.camera.update(1, g);
+    const h = g.police.heli, pv = g.player.vehicle;
+    h.x = pv.x + 6; h.z = pv.z + 52; h.y = 17; h.heading = Math.PI + 0.4; h.vx = 6; h.vz = -10;
   },
 
   /** Afternoon cruise on Coral Strand toward the beach and Sunfall Pier, radio on. */
@@ -148,6 +150,17 @@ SHOTS.overhead = (g) => {
   const moving = g.vehicles.filter((v) => v.ai && v.ai.kind === 'traffic').length;
   const damaged = g.vehicles.filter((v) => v.ai && v.health < v.spec.hp * 0.7).length;
   console.log('[test]', 'traffic', moving, 'stopped', stuck, 'damaged', damaged);
+};
+
+/** Debug view: the car lineup parked in a row. */
+SHOTS.cars = (g) => {
+  g.hour = 15;
+  const keys = ['vanta', 'riviera', 'bayside', 'cub', 'hauler', 'ranchero', 'cab', 'interceptor', 'regent'];
+  const p = g.player; p.x = 1010; p.z = 300;
+  g.vehicles = []; g.humans = [p];
+  keys.forEach((k, i) => g.spawnVehicle(k, 1000 + (i % 5) * 6, 312 + Math.floor(i / 5) * 9, 2.4));
+  g.camera.update = function () { this.eye = [1000, 6, 290]; this.target = [1014, 0.5, 318]; this.fov = 0.9; };
+  g.camera.update();
 };
 
 export function runShot(g, name) {

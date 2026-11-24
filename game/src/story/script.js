@@ -5,9 +5,9 @@ import { lanePoint, headingOfDir } from '../world/roads.js';
 import { Steps } from './missions.js';
 
 export const CONTACTS = {
-  lou: { name: 'Lou Santi', poi: 'garage', color: [1, 0.42, 0.75], role: 'Chop-shop owner, Marco\'s aunt' },
-  teo: { name: 'Teo Bravo', poi: 'lounge', color: [0.3, 0.9, 1], role: 'Fixer at the Ocelot Lounge' },
-  marr: { name: 'Det. Ilsa Marr', poi: 'precinct', color: [0.55, 0.62, 1], role: 'Solara PD detective' },
+  lou: { name: 'Lou Santi', letter: 'L', poi: 'garage', color: [1, 0.42, 0.75], role: 'Chop-shop owner, Marco\'s aunt' },
+  teo: { name: 'Teo Bravo', letter: 'T', poi: 'lounge', color: [0.3, 0.9, 1], role: 'Fixer at the Ocelot Lounge' },
+  marr: { name: 'Det. Ilsa Marr', letter: 'M', poi: 'precinct', color: [0.55, 0.62, 1], role: 'Solara PD detective' },
 };
 
 const say = (who, text) => ({ who, text });
