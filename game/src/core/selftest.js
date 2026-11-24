@@ -137,6 +137,51 @@ export function runSelfTest(g) {
   }
   g.taxi.stop(null);
 
+  // 7c. weapon slots, reload and the rocket launcher
+  if (p.vehicle) g.playerCtl.exitVehicle();
+  g.police.clear();
+  p.weapons.add('launcher'); p.ammo.launcher = 3; p.clip = {};
+  p.x = 956.8; p.z = 250; p.heading = 0; p.hp = 100;
+  press(g, 'Digit7'); run(g, 0.1);
+  const rocketTarget = g.spawnVehicle('bayside', p.x, p.z + 24, 0);
+  const vdx = rocketTarget.x - p.x, vdz = rocketTarget.z - p.z, vl = Math.hypot(vdx, vdz);
+  p.fireCooldown = 0;
+  const fired = g.combat.fire(p, p.x, 1.0, p.z, vdx / vl, -0.02, vdz / vl, p.x, 1.0, p.z);
+  run(g, 1.2);
+  log('slot 7 weapon', p.weapon, 'rocket fired', fired, 'target state', rocketTarget.state, 'reloading', p.reloading > 0, 'rockets left', p.ammo.launcher);
+  p.weapon = 'pistol'; p.clip.pistol = 0; press(g, 'KeyR'); run(g, 1.3);
+  log('pistol clip after reload', p.clip.pistol, 'state', g.state, 'hp', Math.round(p.hp));
+
+  // 7d. crew abilities, the dispatch board, roadblocks and the helicopter spotlight
+  g.missions.done.add('debt_collector'); g.missions.done.add('pier9');
+  const getaway = g.spawnVehicle('vanta', p.x + 3, p.z, 0);
+  g.playerCtl.enterVehicle(getaway);
+  getaway.health = 300;
+  press(g, 'KeyZ'); run(g, 0.1);
+  log('crew repair health', Math.round(getaway.health), 'cooldown', Math.round(g.crew.cool.nina));
+  g.police.setMinStars(3);
+  const ammoBefore = p.ammo.pistol;
+  press(g, 'KeyC'); run(g, 0.1);
+  log('supply drop pistol ammo', ammoBefore, '->', p.ammo.pistol, 'armor', p.armor);
+  // flee north up Ocean Drive, holding the lane
+  g.autopilot = () => { const v = p.vehicle; if (v) { v.input.throttle = 0.9; v.input.steer = Math.max(-1, Math.min(1, (v.x - 956.8) * 0.06 + Math.sin(v.heading) * 1.5)); v.input.handbrake = false; } p.hp = 100; };
+  let blocks = 0, spot = false;
+  const tactics = new Set();
+  run(g, 25, () => {
+    blocks = Math.max(blocks, g.police.roadblocks.active.length);
+    if (g.police.heli && g.police.heli.spotOn) spot = true;
+    for (const u of g.police.dispatchUnits()) tactics.add(u.tactic);
+  });
+  g.autopilot = null;
+  log('dispatch tactics seen', [...tactics].join(','), 'roadblocks', blocks, 'spotlight on suspect', spot);
+  press(g, 'KeyX'); run(g, 0.1);
+  log('scanner jam', g.police.jam.toFixed(1), 'seen while jammed', g.police.isPlayerSeen());
+  g.radio.index = 1;
+  const songA = g.radio.nowPlaying.song.title; g.radio.nextSong();
+  log('radio song', songA, '->', g.radio.nowPlaying.song.title, 'respect', g.respect.points, 'rank', g.respect.rankName);
+  if (p.vehicle) g.playerCtl.exitVehicle();
+  g.police.clear();
+
   // 8. shop and save
   g.money += 5000;
   g.menus.open('shop'); g.menus.buy({ id: 'smg', price: 1500, ammo: 300 }); g.menus.close();

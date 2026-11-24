@@ -84,6 +84,7 @@ export class CombatSystem {
   /** Begin reloading the shooter's current weapon; the clip refills when the timer runs out. */
   startReload(h) {
     const w = WEAPONS[h.weapon];
+    if (h.reloading > 0 && h.reloadWeapon !== h.weapon) h.reloading = 0;
     if (!w || !w.clip || h.reloading > 0) return;
     const loaded = clipOf(h, h.weapon), have = h.ammo[h.weapon] || 0;
     if (loaded >= Math.min(w.clip, have)) return;
