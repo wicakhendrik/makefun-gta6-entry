@@ -124,8 +124,8 @@ export function followRoad(v, ai, dt, g, opts, depth = 0) {
   v.input.steer = clamp(ang * 2.4, -1, 1);
 
   let want = opts.cruise;
-  if (ai.next !== ai.d && along > PITCH - 34) want = Math.min(want, 7.5);
-  if (Math.abs(ang) > 0.5) want = Math.min(want, 6);
+  if (ai.next !== ai.d && along > PITCH - 34) want = Math.min(want, opts.turnSpeed || 7.5);
+  if (Math.abs(ang) > 0.5) want = Math.min(want, opts.turnSpeed ? opts.turnSpeed * 0.8 : 6);
   if (opts.careful) {
     const gap = obstacleAhead(v, g, 7 + Math.max(0, speed) * 1.25);
     if (gap !== null && ai.ignore <= 0) {

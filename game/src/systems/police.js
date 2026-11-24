@@ -230,7 +230,7 @@ export class PoliceSystem {
       // they do not know where the suspect is: drive to the last sighting, then sweep the nearby streets
       const near = dist(v.x, v.z, this.lastSeen.x, this.lastSeen.z) < 30;
       const [si, sj] = nearestNode(this.lastSeen.x, this.lastSeen.z);
-      followRoad(v, ai, dt, g, { cruise: 17, chooseNext: (i, j, dd) => (near ? chooseNextDir(i, j, dd, this.rng) : routeDir(i, j, si, sj, dd)), careful: false });
+      followRoad(v, ai, dt, g, { cruise: 17, turnSpeed: 9, chooseNext: (i, j, dd) => (near ? chooseNextDir(i, j, dd, this.rng) : routeDir(i, j, si, sj, dd)), careful: false });
     } else if (tactic === 'FLANK' && los) {
       // come alongside: aim beside and ahead of the suspect to box them in
       const sp = Math.hypot(vx, vz) || 1;
@@ -248,8 +248,10 @@ export class PoliceSystem {
       v.input.throttle = Math.abs(ang) > 1.6 && d < 12 ? -0.6 : 1;
       v.input.handbrake = tactic !== 'RAM' && Math.abs(ang) > 1.1 && v.speed > 14;
     } else {
-      const [ti, tj] = nearestNode(tx, tz);
-      followRoad(v, ai, dt, g, { cruise: 26 + this.stars * 2, chooseNext: (i, j, dd) => routeDir(i, j, ti, tj, dd), careful: false });
+      // intercept: route to where the suspect will be in a few seconds, flat out with sirens when far behind
+      const ahead = Math.min(4, d / 30);
+      const [ti, tj] = nearestNode(tx + vx * ahead, tz + vz * ahead);
+      followRoad(v, ai, dt, g, { cruise: (d > 90 ? 34 : 27) + this.stars * 2, turnSpeed: 12, chooseNext: (i, j, dd) => routeDir(i, j, ti, tj, dd), careful: false });
     }
     // unstick by reversing when pinned against something
     if (v.speed < 1 && Math.abs(v.input.throttle) > 0.5) ai.stuck += dt; else ai.stuck = 0;
@@ -334,13 +336,14 @@ export class PoliceSystem {
     // the spotlight chases the suspect at a limited slew rate; without a sighting it sweeps around the last one
     h.sweep += dt;
     let gx, gz;
-    if (this.unseen < 1.2) { gx = p.x + (p.vehicle ? p.vehicle.vx : p.vx) * 0.25; gz = p.z + (p.vehicle ? p.vehicle.vz : p.vz) * 0.25; }
+    const nearBeam = dist2(h.spot.x, h.spot.z, p.x, p.z) < 24 * 24 && g.state === 'playing';
+    if (this.unseen < 1.2 || nearBeam) { gx = p.x + (p.vehicle ? p.vehicle.vx : p.vx) * 0.25; gz = p.z + (p.vehicle ? p.vehicle.vz : p.vz) * 0.25; }
     else { const rr = Math.min(45, 8 + this.unseen * 2.5); gx = this.lastSeen.x + Math.cos(h.sweep * 0.9) * rr; gz = this.lastSeen.z + Math.sin(h.sweep * 1.3) * rr; }
     const sdx = gx - h.spot.x, sdz = gz - h.spot.z, sl = Math.hypot(sdx, sdz);
     const slew = Math.min(sl, dt * 26);
     if (sl > 1e-4) { h.spot.x += (sdx / sl) * slew; h.spot.z += (sdz / sl) * slew; }
     const wasOn = h.spotOn;
-    h.spotOn = dist2(h.spot.x, h.spot.z, p.x, p.z) < 8 * 8;
+    h.spotOn = dist2(h.spot.x, h.spot.z, p.x, p.z) < 9 * 9;
     if (h.spotOn && !wasOn && this.unseen > 2) this.radio('HALO-1: eyes on the suspect again.');
     h.orbit += dt * 0.25;
     const tx = h.spot.x + Math.cos(h.orbit) * 28, tz = h.spot.z + Math.sin(h.orbit) * 28;

@@ -5,6 +5,10 @@ import { POI } from '../world/city.js';
 import { RACES } from '../story/activities.js';
 import { readSave } from './save.js';
 import { STORY } from '../story/script.js';
+import { magOf } from '../combat/combat.js';
+import { followRoad } from '../systems/traffic.js';
+import { lanePoint, headingOfDir, chooseNextDir } from '../world/roads.js';
+import { makeRng } from '../engine/math.js';
 
 const log = (...a) => console.log('[test]', ...a);
 
@@ -143,6 +147,78 @@ export function runSelfTest(g) {
   g.missions.active = null;
   const saved = g.saveGame(false);
   log('shop bought smg', p.weapons.has('smg'), 'save written', saved, 'readable', !!readSave());
+
+  // 8b. weapon slots, clips, reload and a rocket
+  if (p.vehicle) g.playerCtl.exitVehicle();
+  run(g, 0.2);
+  p.weapons.add('bat'); p.weapons.add('launcher'); p.ammo.launcher = 4; p.weapons.delete('rifle');
+  press(g, 'Digit7'); run(g, 0.05);
+  const pick7 = p.weapon;
+  press(g, 'Digit6'); run(g, 0.05);
+  log('slot 7 selects', pick7, 'locked slot 6 keeps', p.weapon, 'padlock flash', !!g.hud.lockedSlot);
+  p.weapon = 'smg'; p.ammo.smg = 100; p.mag = {}; p.reloading = 0;
+  const clip0 = magOf(p, 'smg');
+  for (let k = 0; k < 34; k++) { p.fireCooldown = 0; g.combat.fire(p, p.x, 1.4, p.z, 0, 1, 0, p.x, 1.4, p.z); }
+  log('smg clip', clip0, 'after 34 trigger pulls: mag', p.mag.smg, 'ammo', p.ammo.smg, 'reloading', p.reloading > 0);
+  run(g, 2);
+  log('after reload: mag', p.mag.smg, 'reserve', p.ammo.smg - p.mag.smg);
+  p.weapon = 'launcher'; p.mag.launcher = 1; p.reloading = 0; p.fireCooldown = 0;
+  g.combat.fire(p, p.x, 1.2, p.z, 0, -0.05, 1, p.x, 1.2, p.z + 0.6);
+  const inFlight = g.combat.rockets.length;
+  let blasts = 0;
+  const offBlast = () => blasts++;
+  g.events.on('explosion', offBlast);
+  run(g, 3);
+  log('rocket fired', inFlight, 'exploded', blasts > 0, 'rockets left', g.combat.rockets.length, 'launcher reloading', p.reloading > 0 || p.mag.launcher === 1);
+
+  // 8c. crew abilities and street rank
+  g.police.setMinStars(2);
+  const s0 = g.police.stars, cash0 = g.money;
+  press(g, 'KeyX'); run(g, 0.05);
+  log('Teo bribe: stars', s0, '->', g.police.stars, 'cost', cash0 - g.money, 'cooldown', Math.round(g.crew.cool.teo));
+  const s1 = g.police.stars;
+  press(g, 'KeyX'); run(g, 0.05);
+  log('Teo again while busy: stars stay', s1 === g.police.stars);
+  p.armor = 10; press(g, 'KeyC'); run(g, 0.05);
+  log('Nyla supply drop armor', p.armor);
+  const rk = g.crew.rank();
+  log('rank', rk.level, rk.name, rk.rp, 'RP', 'next at', rk.to);
+
+  // 8d. pursuit tactics, roadblocks and the helicopter spotlight on a car driving the grid
+  g.police.clear(); g.police.heli = null; g.missions.active = null;
+  const [rx, rz] = lanePoint(4, 4, 0, 20);
+  const chaseCar = g.spawnVehicle('vanta', rx, rz, headingOfDir(0));
+  g.playerCtl.enterVehicle(chaseCar);
+  g.police.setMinStars(4);
+  const drive = { i: 4, j: 4, d: 0, next: 0, stuck: 0, ignore: 0 }, rng = makeRng(77);
+  g.autopilot = () => { if (p.vehicle) followRoad(p.vehicle, drive, 1 / 60, g, { cruise: 15, chooseNext: (i, j, d) => chooseNextDir(i, j, d, rng), careful: false }); };
+  const tactics = new Set();
+  let blocks = 0, spot = 0, rows = 0, minD = 1e9;
+  const chatter = new Set();
+  run(g, 30, () => {
+    for (const v of g.vehicles) if (v.ai && v.ai.kind === 'police' && v.ai.tactic) tactics.add(v.ai.tactic);
+    blocks = Math.max(blocks, g.police.roadblocks.length);
+    if (g.police.heli && g.police.heli.spotOn) spot++;
+    rows = Math.max(rows, g.police.dispatchList().length);
+    if (g.police.call) chatter.add(g.police.call.text);
+    for (const v of g.vehicles) if (v.ai && v.ai.kind === 'police' && v.driver) { const d = Math.hypot(v.x - p.x, v.z - p.z); if (d < minD) minD = d; }
+  });
+  log('closest pursuit car', minD.toFixed(1), 'm; units', g.vehicles.filter((v) => v.ai && v.ai.kind === 'police').map((v) => `${v.ai.tactic}@${Math.round(Math.hypot(v.x - p.x, v.z - p.z))}m/${v.speed.toFixed(0)}`).join(' '));
+  log('pursuit 30s: tactics', [...tactics].join(','), 'roadblocks', blocks, 'spotlight frames on player', spot, 'dispatch rows', rows, 'stars', g.police.stars);
+  log('radio chatter', [...chatter].slice(0, 3).join(' | '));
+  // vanish: jump far from every unit; the search tactic and the spotlight sweep take over
+  g.autopilot = null;
+  const mover = p.vehicle || p;
+  mover.x = 60; mover.z = 900; mover.vx = mover.vz = 0;
+  if (!p.vehicle) { p.x = 60; p.z = 900; }
+  run(g, 4);
+  const searching = g.vehicles.filter((v) => v.ai && v.ai.kind === 'police' && v.ai.tactic === 'SEARCH').length;
+  log('after vanishing: unseen', g.police.unseen.toFixed(1), 'units searching', searching, 'spot on player', !!(g.police.heli && g.police.heli.spotOn));
+  const np = g.radio.nowPlaying(); g.radio.nextSong(); const np2 = g.radio.nowPlaying();
+  log('radio', np.station, np.title, '->', np2.title);
+  if (p.vehicle) g.playerCtl.exitVehicle();
+  p.hp = p.maxHp;
+  g.police.clear(); g.police.heli = null;
 
   // 9. run free roam for a while and make sure nothing explodes
   let maxVeh = 0, maxHum = 0;
