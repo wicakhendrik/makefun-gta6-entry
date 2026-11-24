@@ -24,7 +24,7 @@ function boot() {
   const loop = (now) => {
     const dt = Math.max(0, (now - last) / 1000);
     last = now;
-    game.frame(readyIn >= 0 ? 1 / 60 : dt);
+    try { game.frame(readyIn >= 0 ? 1 / 60 : dt); } catch (e) { console.error(e); game.input.endFrame(); }
     if (readyIn > 0 && --readyIn === 0) window.__shotReady = true;
     requestAnimationFrame(loop);
   };

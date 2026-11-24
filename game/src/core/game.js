@@ -328,7 +328,9 @@ export class Game {
     this.gangs.update(dt);
     this.missions.update(dt);
     this.activities.update(dt);
-    this.humans = this.humans.filter((h) => !h.gone || h === p);
+    // drop anyone whose physics went non-finite rather than letting NaN spread
+    this.humans = this.humans.filter((h) => (!h.gone && Number.isFinite(h.x) && Number.isFinite(h.z)) || h === p);
+    this.vehicles = this.vehicles.filter((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
     this.fx.update(dt);
     if (p.vehicle) this.stats.driven += Math.hypot(p.x - px, p.z - pz); else this.stats.walked += Math.hypot(p.x - px, p.z - pz);
     if (p.state === 'dead' && this.state === 'playing') this.onWasted();

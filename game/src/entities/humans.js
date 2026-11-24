@@ -48,7 +48,13 @@ export class Human {
     if (this.state === 'knocked') {
       this.fly(dt, game);
       this.knockTime -= dt;
-      if (this.knockTime <= 0 && this.y <= 0) this.state = this.isPlayer ? 'walk' : 'flee';
+      if (this.knockTime <= 0 && this.y <= 0) {
+        if (this.role === 'civ') {
+          // get up and run from wherever the hit came from
+          this.state = 'flee';
+          Object.assign(this.ai, { flee: 5 + Math.random() * 3, fx: this.x - this.vx * 3, fz: this.z - this.vz * 3 });
+        } else this.state = 'walk';
+      }
       return;
     }
     // accelerate toward the wanted velocity

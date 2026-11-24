@@ -71,6 +71,8 @@ export class PedestrianSystem {
     if (h.state === 'dead' || h.state === 'knocked' || h.vehicle) { h.wantX = 0; h.wantZ = 0; return; }
     const ai = h.ai;
     if (h.state === 'flee') {
+      if (!Number.isFinite(ai.flee)) ai.flee = 5;
+      if (!Number.isFinite(ai.fx) || !Number.isFinite(ai.fz)) { ai.fx = h.x + 1; ai.fz = h.z; }
       ai.flee -= dt;
       const dx = h.x - ai.fx, dz = h.z - ai.fz, l = Math.hypot(dx, dz) || 1;
       let mx = dx / l, mz = dz / l;

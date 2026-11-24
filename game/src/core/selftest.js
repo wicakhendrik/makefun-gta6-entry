@@ -58,6 +58,14 @@ export function runSelfTest(g) {
   log('4 stars after 20s: police cars', units, 'officers on foot', cops, 'heli', !!g.police.heli, 'player min hp', Math.round(minHp), 'state', g.state, 'stars', g.police.stars);
   if (g.state === 'dead') run(g, 5);
 
+  // regression: a pedestrian knocked down by a car must get up and flee with a finite position
+  const victim = g.peds.spawnPed(5, 60) || g.humans.find((h) => h.role === 'civ' && h.state !== 'dead');
+  if (victim) {
+    victim.knock(6, 2, 3, g);
+    run(g, 3);
+    log('knocked pedestrian recovers', victim.state, Number.isFinite(victim.x) && Number.isFinite(victim.z) ? 'finite' : 'NaN');
+  }
+
   // 4. evade: teleport far away and wait
   g.police.clear();
   log('cleared', g.police.stars);

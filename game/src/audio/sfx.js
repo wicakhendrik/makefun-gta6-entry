@@ -88,7 +88,7 @@ export class AudioEngine {
   play(x, z, range, fn) {
     if (!this.ctx) return;
     const { gain, pan } = this.spatial(x, z, range);
-    if (gain < 0.01) return;
+    if (!(gain >= 0.01) || !Number.isFinite(pan)) return;
     fn(this.ctx.currentTime, this.out(gain, pan));
   }
 
