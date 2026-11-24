@@ -85,6 +85,10 @@ export const SHOTS = {
     g.autopilot = () => { const v = g.player.vehicle; if (v) { v.input.throttle = 1; v.input.steer = (x + 0.5 - v.x) * 0.05; } };
     simulate(g, 1.4);
     g.police.placeRoadblock(1);
+    // a cruiser that lost control behind the pursuit goes up in flames just before the shot
+    const pc = g.player.vehicle;
+    const wreck = g.police.spawnUnitAt(pc.x - 6, pc.z + 30, headingOfDir(3) + 0.7);
+    wreck.health = 0; wreck.state = 'burning'; wreck.burnTime = 0.2;
     simulate(g, 0.3);
     g.crew.cool.teo = 38;
     radioOn(g, 0, 1, 0.42);
