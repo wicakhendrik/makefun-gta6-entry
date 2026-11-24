@@ -152,7 +152,10 @@ export class Hud {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.w, this.h);
     if (!this.visible || g.state === 'title') return;
-    const W = this.w, H = this.h;
+    // the layout is designed for 1280x720 and scales with the window so panels never collide
+    const scale = Math.max(0.55, Math.min(1.6, this.w / 1280, this.h / 720));
+    ctx.scale(scale, scale);
+    const W = this.w / scale, H = this.h / scale;
 
     // cinematic vignette
     const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.72);
