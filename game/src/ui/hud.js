@@ -69,7 +69,7 @@ export class Hud {
     if (this.dialogue.length) {
       this.dialogueTime += dt;
       const line = this.dialogue[0];
-      if (this.dialogueTime > 1.6 + line.text.length * 0.045) { this.dialogue.shift(); this.dialogueTime = 0; }
+      if (!line.hold && this.dialogueTime > 1.6 + line.text.length * 0.045) { this.dialogue.shift(); this.dialogueTime = 0; }
     }
     if (this.big) { this.big.t -= dt; if (this.big.t <= 0) this.big = null; }
     if (this.title) { this.title.t -= dt; if (this.title.t <= 0) this.title = null; }

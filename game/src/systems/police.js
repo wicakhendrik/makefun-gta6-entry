@@ -378,14 +378,14 @@ export class PoliceSystem {
   renderSpotlight(r, env, right, up) {
     const h = this.heli;
     if (!h || h.hp <= 0 || !h.spot || this.stars < 3) return;
-    const k = 0.35 + env.night * 0.65;
+    const k = 0.9 + env.night * 0.4;
     const sx = h.spot.x, sz = h.spot.z;
     const ox = h.x + Math.sin(h.heading) * 2, oy = h.y - 1.2, oz = h.z + Math.cos(h.heading) * 2;
     const n = 18;
     for (let i = 1; i <= n; i++) {
       const t = i / n;
       const x = ox + (sx - ox) * t, y = oy + (0.6 - oy) * t, z = oz + (sz - oz) * t;
-      const a = 0.05 + 0.05 * (1 - t);
+      const a = 0.07 + 0.08 * (1 - t);
       r.billboard(x, y, z, 0.5 + t * 4.2, a * 2.2 * k, a * 2.15 * k, a * 1.9 * k, 0, right, up);
     }
     r.groundQuad(sx, sz, 0.09, 6.5, 6.5, 0, 0.55 * k, 0.55 * k, 0.48 * k, 0);

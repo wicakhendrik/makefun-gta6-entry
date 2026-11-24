@@ -7,7 +7,7 @@ import { generateCity, POI, CITY_MAX, blockCenter } from '../world/city.js';
 import { buildCityMeshes } from '../world/citymesh.js';
 import { CollisionWorld } from '../world/collision.js';
 import { Vehicle, VEHICLE_TYPES, collideVehicles } from '../entities/vehicles.js';
-import { buildVehicleMesh, buildHelicopterMesh, buildRotorMesh } from '../entities/vehiclemodels.js';
+import { buildVehicleMesh, buildHelicopterMesh, buildRotorMesh, buildBikeRiderMesh } from '../entities/vehiclemodels.js';
 import { Human } from '../entities/humans.js';
 import { buildHumanMesh, humanLooks } from '../entities/humanmodels.js';
 import { EventBus } from './events.js';
@@ -95,7 +95,7 @@ export class Game {
     this.meshes = {
       cityGlobal: r.upload(cm.global), ferris: r.upload(cm.ferris), ferrisCenter: cm.ferrisCenter,
       chunks: cm.chunks.map((c) => ({ mesh: r.upload(c.built), x: c.x, z: c.z, radius: c.radius })),
-      heli: r.upload(buildHelicopterMesh()), rotor: r.upload(buildRotorMesh()),
+      heli: r.upload(buildHelicopterMesh()), rotor: r.upload(buildRotorMesh()), bikeRider: r.upload(buildBikeRiderMesh()),
       vehicles: {}, civilians: [],
     };
     for (const [k, spec] of Object.entries(VEHICLE_TYPES)) this.meshes.vehicles[k] = r.upload(buildVehicleMesh(spec));
@@ -417,6 +417,7 @@ export class Game {
       if (d2 > 360 * 360) continue;
       v.modelMatrix();
       r.draw(this.meshes.vehicles[v.type], v.model, v.tint, 0, d2 < 160 * 160);
+      if (v.spec.bike && v.driver) r.draw(this.meshes.bikeRider, v.model, v.driver.tint, 0, d2 < 120 * 120);
       if (night && v.state === 'ok' && (v.driver || v === p.vehicle) && d2 < 140 * 140 && glows < 40) {
         glows++;
         const s = Math.sin(v.heading), c = Math.cos(v.heading);

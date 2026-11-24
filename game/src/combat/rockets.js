@@ -28,9 +28,10 @@ export class RocketSystem {
       }
       r.x += r.dx * seg; r.y += r.dy * seg; r.z += r.dz * seg;
       r.trail += dt;
-      while (r.trail > 0.012) {
-        r.trail -= 0.012;
-        g.fx.spawn(r.x - r.dx * 0.6, r.y - r.dy * 0.6, r.z - r.dz * 0.6, (Math.random() - 0.5) * 0.5, 0.4, (Math.random() - 0.5) * 0.5, 1.4 + Math.random(), 0.35, 1.3, 0.7, 0.7, 0.72, 0.5, -0.1, 'smoke');
+      while (r.trail > 0.006) {
+        r.trail -= 0.006;
+        g.fx.spawn(r.x - r.dx * 0.6, r.y - r.dy * 0.6, r.z - r.dz * 0.6, (Math.random() - 0.5) * 0.5, 0.4, (Math.random() - 0.5) * 0.5, 1.4 + Math.random(), 0.45, 1.4, 0.78, 0.78, 0.8, 0.6, -0.1, 'smoke');
+        g.fx.spawn(r.x - r.dx * 0.5, r.y - r.dy * 0.5, r.z - r.dz * 0.5, 0, 0, 0, 0.09, 0.4, 0, 1, 0.6, 0.2, 0, 0, 'fire');
       }
     }
     this.list = this.list.filter((r) => !r.done);

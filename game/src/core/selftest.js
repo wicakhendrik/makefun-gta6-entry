@@ -120,9 +120,9 @@ export function runSelfTest(g) {
 
   // 7b. taxi fares
   if (p.vehicle) g.playerCtl.exitVehicle();
-  g.police.clear(); g.missions.active = null;
+  g.police.clear(); g.missions.active = null; g.activities.race = null;
   const cab = g.spawnVehicle('cab', p.x + 3, p.z, 0);
-  p.x = cab.x + 2.5; p.z = cab.z; press(g, 'KeyF'); run(g, 0.2);
+  p.x = cab.x + 2.5; p.z = cab.z; g.playerCtl.enterVehicle(cab); run(g, 0.2);
   press(g, 'KeyE'); run(g, 0.1);
   log('taxi on duty', g.taxi.active, 'phase', g.taxi.fare && g.taxi.fare.phase);
   if (g.taxi.fare) {

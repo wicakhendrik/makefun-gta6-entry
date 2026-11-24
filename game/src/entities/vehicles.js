@@ -1,6 +1,6 @@
 // Vehicles: the lineup of Port Solara's own makes, arcade driving physics, damage, fire and explosions.
 
-import { clamp, wrapAngle, hexColor, modelYaw } from '../engine/math.js';
+import { clamp, wrapAngle, hexColor, modelYaw, modelEuler } from '../engine/math.js';
 
 export const VEHICLE_TYPES = {
   vanta: { name: 'Kestrel Vanta', cls: 'Sports', shape: 'sports', len: 4.5, wid: 1.95, hgt: 1.18, accel: 16, top: 60, grip: 8, steer: 2.5, mass: 1300, hp: 850, value: 4000, colors: ['#e8322e', '#ffcc22', '#1fa0ff', '#f4f4f4', '#18181c', '#ff6a1a'] },
@@ -11,10 +11,11 @@ export const VEHICLE_TYPES = {
   ranchero: { name: 'Gannet Ranchero', cls: 'Pickup', shape: 'pickup', len: 5.2, wid: 2.0, hgt: 1.85, accel: 10.5, top: 43, grip: 6.0, steer: 1.95, mass: 2000, hp: 1300, value: 2000, colors: ['#8c2f22', '#2f3f5c', '#d8c49a', '#3a3a3a', '#5c7a3a'] },
   cab: { name: 'Brisa Cab', cls: 'Taxi', shape: 'sedan', len: 4.8, wid: 1.9, hgt: 1.48, accel: 10, top: 43, grip: 6.4, steer: 2.1, mass: 1500, hp: 1000, value: 1100, taxi: true, colors: ['#f6c445'] },
   interceptor: { name: 'SPD Interceptor', cls: 'Police', shape: 'sedan', len: 4.9, wid: 1.95, hgt: 1.48, accel: 14, top: 56, grip: 7.4, steer: 2.25, mass: 1750, hp: 1300, value: 3000, police: true, colors: ['#f4f6f8'] },
+  bike: { name: 'Kite S600', cls: 'Motorbike', shape: 'bike', bike: true, len: 2.2, wid: 0.8, hgt: 1.15, accel: 17, top: 62, grip: 8.2, steer: 2.9, mass: 260, hp: 480, value: 1800, colors: ['#ff3fa4', '#36f2ff', '#ffcc22', '#f4f4f4', '#18181c', '#3dff8e'] },
   regent: { name: 'Crane Regent', cls: 'Limousine', shape: 'limo', len: 6.8, wid: 2.0, hgt: 1.5, accel: 9, top: 46, grip: 5.8, steer: 1.6, mass: 2600, hp: 2200, value: 5000, colors: ['#101014'] },
 };
 
-export const TRAFFIC_MIX = ['bayside', 'bayside', 'cub', 'cub', 'hauler', 'ranchero', 'cab', 'riviera', 'vanta', 'bayside', 'cub', 'cab'];
+export const TRAFFIC_MIX = ['bayside', 'bayside', 'cub', 'cub', 'hauler', 'ranchero', 'cab', 'riviera', 'vanta', 'bayside', 'cub', 'cab', 'bike', 'bike'];
 
 let nextVehicleId = 1;
 
@@ -168,6 +169,12 @@ export class Vehicle {
 
   modelMatrix() {
     const bounce = Math.sin(performance.now() * 0.04) * 0.03 * this.bump;
+    if (this.spec.bike) {
+      // motorbikes lean into the turn, more at speed; a parked bike rests on its stand
+      const want = this.driver ? clamp(-this.steer * Math.abs(this.forwardSpeed) / 22, -0.5, 0.5) : 0.18;
+      this.lean = (this.lean || 0) + (want - (this.lean || 0)) * 0.15;
+      return modelEuler(this.model, this.x, this.y + bounce, this.z, this.heading, 0, this.lean);
+    }
     return modelYaw(this.model, this.x, this.y + bounce, this.z, this.heading);
   }
 

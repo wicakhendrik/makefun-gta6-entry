@@ -12,6 +12,7 @@ const RIM = C('#b8bcc4');
 
 /** Build the mesh for a vehicle spec. Local +Z is the front, the body spans [-wid/2, wid/2] in X. */
 export function buildVehicleMesh(spec) {
+  if (spec.shape === 'bike') return buildBikeMesh();
   const m = new MeshBuilder();
   const L = spec.len, W = spec.wid, H = spec.hgt;
   const hw = W / 2, hl = L / 2;
@@ -101,6 +102,54 @@ export function buildVehicleMesh(spec) {
       m.wheel(x + Math.sign(x) * 0.02, wr, z, wr * 0.55, 0.3, 6, RIM);
     }
   }
+  return m.build();
+}
+
+/** Sport motorbike: two wheels, frame, painted tank and fairing, seat, bars and lights. Local +Z is the front. */
+export function buildBikeMesh() {
+  const m = new MeshBuilder();
+  const DARK = C('#202228'), CHROME = C('#c8ccd4');
+  for (const z of [-0.74, 0.76]) {
+    m.wheel(0, 0.34, z, 0.34, 0.16, 10, TYRE);
+    m.wheel(0, 0.34, z, 0.2, 0.18, 8, RIM);
+  }
+  m.box(-0.08, 0.36, -0.78, 0.08, 0.44, -0.1, DARK);               // swing arm
+  m.box(-0.12, 0.4, -0.25, 0.12, 0.72, 0.45, DARK);                // engine block and frame
+  m.box(-0.1, 0.3, -0.05, 0.1, 0.42, 0.35, CHROME);                // sump
+  m.box(0.14, 0.32, -0.75, 0.24, 0.42, -0.05, CHROME);             // exhaust
+  m.box(0.15, 0.36, -0.9, 0.25, 0.46, -0.72, DARK);
+  m.box(-0.18, 0.7, 0.0, 0.18, 0.98, 0.5, PAINT, MAT.PAINT);       // tank
+  m.box(-0.2, 0.55, 0.45, 0.2, 1.02, 0.72, PAINT, MAT.PAINT);      // fairing
+  m.wedge(-0.16, 0.16, 1.02, 1.2, 0.7, 0.5, C('#000000'), MAT.GLASS); // screen
+  m.box(-0.15, 0.78, -0.62, 0.15, 0.9, 0.02, C('#15151a'));        // seat
+  m.box(-0.12, 0.7, -0.92, 0.12, 0.86, -0.6, PAINT, MAT.PAINT);    // tail
+  m.box(-0.05, 0.34, 0.62, 0.05, 1.0, 0.72, CHROME);               // fork
+  m.box(-0.4, 1.0, 0.46, 0.4, 1.05, 0.52, DARK);                   // bars
+  m.box(-0.14, 0.4, 0.62, 0.14, 0.48, 0.98, PAINT, MAT.PAINT);     // front fender
+  m.box(-0.09, 0.8, 0.72, 0.09, 0.94, 0.76, C('#fff4d8'), MAT.EMISSIVE);
+  m.box(-0.07, 0.76, -0.95, 0.07, 0.84, -0.92, C('#ff2030'), MAT.EMISSIVE);
+  return m.build();
+}
+
+/** The rider crouched over a motorbike; the jacket takes the rider's own colour. */
+export function buildBikeRiderMesh() {
+  const m = new MeshBuilder();
+  const PANTS = C('#23262e'), SKIN = C('#c98d62'), HELMET = C('#18181c'), BOOT = C('#121214');
+  for (const sx of [-1, 1]) {
+    m.box(sx * 0.07, 0.84, -0.42, sx * 0.21, 1.0, 0.12, PANTS);     // thighs
+    m.box(sx * 0.12, 0.42, 0.02, sx * 0.24, 0.92, 0.2, PANTS);      // shins
+    m.box(sx * 0.12, 0.36, 0.0, sx * 0.25, 0.48, 0.3, BOOT);
+  }
+  m.box(-0.2, 0.95, -0.5, 0.2, 1.22, -0.18, PANTS);                  // hips
+  m.box(-0.22, 1.12, -0.4, 0.22, 1.42, 0.0, PAINT, MAT.PAINT);       // lower back
+  m.box(-0.24, 1.3, -0.18, 0.24, 1.55, 0.22, PAINT, MAT.PAINT);      // shoulders, leaning forward
+  for (const sx of [-1, 1]) {
+    m.box(sx * 0.2, 1.18, 0.05, sx * 0.32, 1.42, 0.3, PAINT, MAT.PAINT);
+    m.box(sx * 0.26, 1.02, 0.25, sx * 0.36, 1.2, 0.52, PAINT, MAT.PAINT);
+    m.box(sx * 0.3, 0.98, 0.46, sx * 0.4, 1.08, 0.56, SKIN);
+  }
+  m.box(-0.15, 1.52, 0.02, 0.15, 1.84, 0.34, HELMET);                // helmet
+  m.box(-0.13, 1.6, 0.33, 0.13, 1.72, 0.36, C('#36f2ff'), MAT.GLASS);
   return m.build();
 }
 
