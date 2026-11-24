@@ -94,6 +94,13 @@ export const SHOTS = {
     // the last unit took a hit and is burning out behind the pack
     const last = units[units.length - 1];
     if (last) { last.health = 0; last.state = 'burning'; last.burnTime = 3; last.driver = null; for (let k = 0; k < 40; k++) g.fx.fire(last.x, 0.8, last.z); }
+    // the second unit just went up after a crash: catch the fireball a few frames in
+    const hit = units[1];
+    if (hit) {
+      hit.health = 0; hit.state = 'burning'; hit.burnTime = 3; hit.vx *= 0.3; hit.vz *= 0.3;
+      g.fx.explosion(hit.x, 1, hit.z);
+      for (let k = 0; k < 6; k++) g.fx.update(1 / 60);
+    }
     g.camera.yaw = -0.3; g.camera.pitch = 0.17; g.camera.lookTimer = 99;
     g.camera.update(1, g);
     heliInView(g, 52, 0, 0.27);
