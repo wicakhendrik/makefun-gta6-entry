@@ -3,8 +3,24 @@
 import { makeRng, dist, dist2, clamp, wrapAngle, modelEuler, modelYaw } from '../engine/math.js';
 import { Vehicle } from '../entities/vehicles.js';
 import { Human } from '../entities/humans.js';
-import { randomLaneSpot, nearestNode, routeDir, DIRS } from '../world/roads.js';
+import { randomLaneSpot, nearestNode, routeDir, DIRS, dirOfHeading, headingOfDir, nodeValid, chooseNextDir } from '../world/roads.js';
 import { followRoad } from './traffic.js';
+import { PITCH, DISTRICTS, districtAt } from '../world/city.js';
+
+const CALL_NAMES = ['KILO', 'LIMA', 'ADAM', 'NORA', 'VICTOR', 'TANGO', 'OSCAR', 'MARY', 'ZULU', 'HENRY'];
+const HEADINGS = ['eastbound', 'southbound', 'westbound', 'northbound'];
+/** Labels the dispatch panel shows for each pursuit tactic. */
+export const TACTICS = {
+  RAM: { label: 'RAMMING', color: '#ff4a4a' },
+  FLANK: { label: 'FLANKING', color: '#ffae3a' },
+  CLOSE: { label: 'CLOSING IN', color: '#ffe04a' },
+  SEARCH: { label: 'SEARCHING', color: '#a8b4d0' },
+  ROADBLOCK: { label: 'ROADBLOCK', color: '#ff6ac1' },
+  SPOTLIGHT: { label: 'SPOTLIGHT', color: '#ffffff' },
+  GUNNER: { label: 'AIR GUNNER', color: '#ff4a4a' },
+  FOOT: { label: 'ON FOOT', color: '#7ab8ff' },
+  CUFF: { label: 'CUFFING', color: '#7ab8ff' },
+};
 
 export const STAR_HEAT = [1, 3, 7, 13, 22];
 const CRIME_HEAT = { gunfire: 0.35, assault: 0.7, hitped: 0.9, kill: 1.6, copkill: 4.5, carjack: 0.5, copcar: 0.5, explode: 1.6, copcarjack: 3.2 };
@@ -23,6 +39,15 @@ export class PoliceSystem {
     this.bustTimer = 0;
     this.flashT = 0;
     this.patrolTimer = 5;
+    this.callSeq = 0;
+    this.roadblocks = [];
+    this.roadblockTimer = 9;
+    this.tacticTimer = 0;
+    this.call = null;
+    game.events.on('wantedUp', (s) => {
+      const p = game.player;
+      this.radio(s >= 3 ? `All units: ${s}-star felony in ${this.placeName()}. Air support rolling.` : `Units respond: suspect ${p.vehicle ? 'in a ' + p.vehicle.spec.name : 'on foot'} in ${this.placeName()}.`);
+    });
     game.events.on('gunfire', (shooter, x, z) => { if (shooter.isPlayer && this.witnesses(x, z, 45)) this.crime('gunfire'); });
     game.events.on('humanKilled', (h, attacker) => {
       if (!attacker || !attacker.isPlayer) return;
@@ -74,7 +99,24 @@ export class PoliceSystem {
     this.heat = 0; this.stars = 0; this.unseen = 0; this.bustTimer = 0;
     for (const v of this.game.vehicles) if (v.ai && v.ai.kind === 'police') { v.ai.kind = 'traffic'; v.ai.cruise = 12; v.sirenOn = false; v.ai.panic = 0; v.ai.stuck = 0; v.ai.ignore = 0; }
     for (const h of this.game.humans) if (h.role === 'cop') h.ai.mode = 'leave';
+    for (const b of this.roadblocks) for (const v of b.cars) { v.ai = { kind: 'parked' }; v.sirenOn = false; }
+    this.roadblocks = [];
+    this.roadblockTimer = 9;
   }
+
+  nextCallSign() {
+    const n = this.callSeq++;
+    return `${CALL_NAMES[n % CALL_NAMES.length]}-${11 + ((n * 17) % 79)}`;
+  }
+
+  placeName() {
+    const p = this.game.player;
+    const d = DISTRICTS[districtAt(p.x, p.z)];
+    return d ? d.name : 'Port Solara';
+  }
+
+  /** A line of police radio chatter for the dispatch panel. */
+  radio(text) { this.call = { text, t: 7 }; }
 
   update(dt) {
     const g = this.game, p = g.player;
@@ -92,7 +134,16 @@ export class PoliceSystem {
       const units = g.vehicles.filter((v) => v.ai && v.ai.kind === 'police').length;
       if (units < UNITS_BY_STARS[this.stars] && this.spawnTimer <= 0) { this.spawnUnit(); this.spawnTimer = 2.5; }
       if (this.stars >= 3 && !this.heli) this.spawnHeli();
+      this.tacticTimer -= dt;
+      if (this.tacticTimer <= 0) { this.tacticTimer = 0.5; this.assignTactics(); }
+      this.roadblockTimer -= dt;
+      if (this.stars >= 2 && p.vehicle && p.vehicle.speed > 6 && this.roadblockTimer <= 0) {
+        this.roadblockTimer = 18 - this.stars * 1.5;
+        this.placeRoadblock();
+      }
     }
+    this.updateRoadblocks(dt);
+    if (this.call) { this.call.t -= dt; if (this.call.t <= 0) this.call = null; }
     // occasional patrol car in normal traffic
     this.patrolTimer -= dt;
     if (this.patrolTimer <= 0) {
@@ -115,7 +166,8 @@ export class PoliceSystem {
   isPlayerSeen() {
     const g = this.game, p = g.player;
     const py = p.vehicle ? 1.2 : 1.5;
-    if (this.heli && this.heli.hp > 0 && dist2(this.heli.x, this.heli.z, p.x, p.z) < 70 * 70) return true;
+    if (this.heli && this.heli.hp > 0 && (this.heli.spotOn || dist2(this.heli.x, this.heli.z, p.x, p.z) < 30 * 30)) return true;
+    for (const b of this.roadblocks) if (dist2(b.x, b.z, p.x, p.z) < 40 * 40) return true;
     for (const v of g.vehicles) {
       if (!v.spec.police || !v.driver || v.state !== 'ok') continue;
       const d2 = dist2(v.x, v.z, p.x, p.z);
@@ -135,8 +187,15 @@ export class PoliceSystem {
     const g = this.game, p = g.player;
     const spot = randomLaneSpot(this.rng, p.x, p.z, 90, 200);
     if (!spot) return null;
-    const v = new Vehicle('interceptor', spot.x, spot.z, spot.heading);
-    v.ai = { kind: 'police', i: spot.i, j: spot.j, d: spot.d, next: spot.d, stuck: 0, ignore: 0, deployed: false, reverse: 0 };
+    return this.spawnUnitAt(spot.x, spot.z, spot.heading, spot);
+  }
+
+  /** A crewed pursuit car at a given spot (spawning and staged scenes). */
+  spawnUnitAt(x, z, heading, spot) {
+    const g = this.game;
+    if (!spot) { const [i, j] = nearestNode(x, z); spot = { i, j, d: dirOfHeading(heading) }; }
+    const v = new Vehicle('interceptor', x, z, heading);
+    v.ai = { kind: 'police', i: spot.i, j: spot.j, d: spot.d, next: spot.d, stuck: 0, ignore: 0, deployed: false, reverse: 0, callSign: this.nextCallSign(), tactic: 'CLOSE', side: this.callSeq % 2 ? 1 : -1 };
     v.sirenOn = true;
     const cop = new Human('cop', v.x, v.z, 0, [0.12, 0.17, 0.32]);
     cop.vehicle = v; cop.state = 'driving'; v.driver = cop;
@@ -164,13 +223,30 @@ export class PoliceSystem {
       if (v.speed < 2 && !ai.deployed) { ai.deployed = true; this.deployOfficers(v); }
       return;
     }
-    if (los || d < 25) {
-      const lead = p.vehicle ? 0.5 : 0.2;
-      const px = tx + (p.vehicle ? p.vehicle.vx : p.vx) * lead, pz = tz + (p.vehicle ? p.vehicle.vz : p.vz) * lead;
+    const tactic = ai.tactic || 'CLOSE';
+    const pv = p.vehicle;
+    const vx = pv ? pv.vx : p.vx, vz = pv ? pv.vz : p.vz;
+    if (tactic === 'SEARCH') {
+      // they do not know where the suspect is: drive to the last sighting, then sweep the nearby streets
+      const near = dist(v.x, v.z, this.lastSeen.x, this.lastSeen.z) < 30;
+      const [si, sj] = nearestNode(this.lastSeen.x, this.lastSeen.z);
+      followRoad(v, ai, dt, g, { cruise: 17, chooseNext: (i, j, dd) => (near ? chooseNextDir(i, j, dd, this.rng) : routeDir(i, j, si, sj, dd)), careful: false });
+    } else if (tactic === 'FLANK' && los) {
+      // come alongside: aim beside and ahead of the suspect to box them in
+      const sp = Math.hypot(vx, vz) || 1;
+      const ox = (-vz / sp) * ai.side * 6, oz = (vx / sp) * ai.side * 6;
+      const px = tx + vx * 0.9 + ox, pz = tz + vz * 0.9 + oz;
+      const ang = wrapAngle(Math.atan2(px - v.x, pz - v.z) - v.heading);
+      v.input.steer = clamp(ang * 2.4, -1, 1);
+      v.input.throttle = 1; v.input.handbrake = false;
+    } else if (los || d < 25) {
+      // RAM and CLOSE: drive at where the suspect will be; rammers lead harder and never brake
+      const lead = tactic === 'RAM' ? 0.75 : pv ? 0.45 : 0.2;
+      const px = tx + vx * lead, pz = tz + vz * lead;
       const ang = wrapAngle(Math.atan2(px - v.x, pz - v.z) - v.heading);
       v.input.steer = clamp(ang * 2.2, -1, 1);
       v.input.throttle = Math.abs(ang) > 1.6 && d < 12 ? -0.6 : 1;
-      v.input.handbrake = Math.abs(ang) > 1.1 && v.speed > 14;
+      v.input.handbrake = tactic !== 'RAM' && Math.abs(ang) > 1.1 && v.speed > 14;
     } else {
       const [ti, tj] = nearestNode(tx, tz);
       followRoad(v, ai, dt, g, { cruise: 26 + this.stars * 2, chooseNext: (i, j, dd) => routeDir(i, j, ti, tj, dd), careful: false });
@@ -221,7 +297,8 @@ export class PoliceSystem {
     }
     h.aimYaw = Math.atan2(dx, dz);
     let mx = 0, mz = 0;
-    if (!los || d > 26) { mx = dx * 4.8; mz = dz * 4.8; }
+    if (h.ai.hold && d > 22) { mx = 0; mz = 0; }
+    else if (!los || d > 26) { mx = dx * 4.8; mz = dz * 4.8; }
     else if (d < 7) { mx = -dx * 2.5; mz = -dz * 2.5; }
     else { mx = -dz * h.ai.strafe * 1.6; mz = dx * h.ai.strafe * 1.6; if (Math.random() < dt * 0.4) h.ai.strafe *= -1; }
     if (h.blocked) { const t = mx; mx = -mz; mz = t; }
@@ -232,7 +309,9 @@ export class PoliceSystem {
   spawnHeli() {
     const p = this.game.player;
     const a = Math.random() * Math.PI * 2;
-    this.heli = { x: p.x + Math.cos(a) * 180, z: p.z + Math.sin(a) * 180, y: 60, heading: 0, vx: 0, vz: 0, hp: 650, rotor: 0, orbit: a, fire: 2, crash: 0, model: new Float32Array(16), rotorModel: new Float32Array(16) };
+    this.heli = { x: p.x + Math.cos(a) * 180, z: p.z + Math.sin(a) * 180, y: 60, heading: 0, vx: 0, vz: 0, hp: 650, rotor: 0, orbit: a, fire: 2, crash: 0, model: new Float32Array(16), rotorModel: new Float32Array(16),
+      spot: { x: p.x + Math.cos(a) * 40, z: p.z + Math.sin(a) * 40 }, spotOn: false, sweep: 0, callSign: 'HALO-1' };
+    this.radio('HALO-1 airborne, spotlight up.');
   }
 
   updateHeli(dt) {
@@ -252,17 +331,28 @@ export class PoliceSystem {
       if (h.y > 140) this.heli = null;
       return;
     }
+    // the spotlight chases the suspect at a limited slew rate; without a sighting it sweeps around the last one
+    h.sweep += dt;
+    let gx, gz;
+    if (this.unseen < 1.2) { gx = p.x + (p.vehicle ? p.vehicle.vx : p.vx) * 0.25; gz = p.z + (p.vehicle ? p.vehicle.vz : p.vz) * 0.25; }
+    else { const rr = Math.min(45, 8 + this.unseen * 2.5); gx = this.lastSeen.x + Math.cos(h.sweep * 0.9) * rr; gz = this.lastSeen.z + Math.sin(h.sweep * 1.3) * rr; }
+    const sdx = gx - h.spot.x, sdz = gz - h.spot.z, sl = Math.hypot(sdx, sdz);
+    const slew = Math.min(sl, dt * 26);
+    if (sl > 1e-4) { h.spot.x += (sdx / sl) * slew; h.spot.z += (sdz / sl) * slew; }
+    const wasOn = h.spotOn;
+    h.spotOn = dist2(h.spot.x, h.spot.z, p.x, p.z) < 8 * 8;
+    if (h.spotOn && !wasOn && this.unseen > 2) this.radio('HALO-1: eyes on the suspect again.');
     h.orbit += dt * 0.25;
-    const tx = p.x + Math.cos(h.orbit) * 28, tz = p.z + Math.sin(h.orbit) * 28;
+    const tx = h.spot.x + Math.cos(h.orbit) * 28, tz = h.spot.z + Math.sin(h.orbit) * 28;
     const dx = tx - h.x, dz = tz - h.z, l = Math.hypot(dx, dz) || 1;
-    const sp = Math.min(32, l * 0.8);
+    const sp = Math.min(34, l * 0.8);
     h.vx += ((dx / l) * sp - h.vx) * Math.min(1, dt * 1.2);
     h.vz += ((dz / l) * sp - h.vz) * Math.min(1, dt * 1.2);
     h.x += h.vx * dt; h.z += h.vz * dt;
     h.y += (34 - h.y) * Math.min(1, dt * 0.8);
     h.heading = Math.atan2(p.x - h.x, p.z - h.z);
     h.fire -= dt;
-    if (this.stars >= 4 && h.fire <= 0 && p.alive) {
+    if (this.stars >= 4 && h.fire <= 0 && p.alive && h.spotOn) {
       h.fire = 0.14;
       if (Math.random() < 0.08) h.fire = 2.5;
       const ox = h.x, oy = h.y - 1, oz = h.z;
@@ -292,10 +382,105 @@ export class PoliceSystem {
     const tilt = clamp(Math.hypot(h.vx, h.vz) * 0.01, 0, 0.25);
     r.draw(meshes.heli, modelEuler(h.model, h.x, h.y, h.z, h.heading, tilt, 0));
     r.draw(meshes.rotor, modelYaw(h.rotorModel, h.x, h.y + 3.0, h.z, h.rotor));
-    if (env.night > 0.3) {
-      const p = this.game.player;
-      r.addLight(p.x, 6, p.z, 16, 2.2, 2.2, 2.0);
+    if (h.hp <= 0 || !h.spot) return;
+    // spotlight: a cone of faint beams from the nose down to a bright pool on the ground
+    const k = 0.35 + env.night * 0.65;
+    const sx = h.spot.x, sz = h.spot.z, oy = h.y - 1.2;
+    for (let a = 0; a < 10; a++) {
+      const ang = (a / 10) * Math.PI * 2;
+      r.streak(h.x, oy, h.z, sx + Math.cos(ang) * 5.5, 0.3, sz + Math.sin(ang) * 5.5, 0.35, 0.16 * k, 0.16 * k, 0.13 * k, 0);
     }
+    r.streak(h.x, oy, h.z, sx, 0.3, sz, 1.6, 0.22 * k, 0.22 * k, 0.18 * k, 0);
+    r.groundQuad(sx, sz, 0.12, 7, 7, 0, 1.1 * k, 1.05 * k, 0.9 * k, 0);
+    r.groundQuad(sx, sz, 0.13, 3.5, 3.5, 0, 0.9 * k, 0.9 * k, 0.8 * k, 0);
+    if (env.night > 0.3) r.addLight(sx, 7, sz, 18, 2.4, 2.4, 2.1);
+  }
+
+  /** Tactics for every pursuit car, re-planned twice a second from distance, sight lines and the search state. */
+  assignTactics() {
+    const g = this.game, p = g.player;
+    const tx = p.vehicle ? p.vehicle.x : p.x, tz = p.vehicle ? p.vehicle.z : p.z;
+    const units = g.vehicles.filter((v) => v.ai && v.ai.kind === 'police' && v.driver && v.state === 'ok');
+    for (const v of units) v.ai.dist = dist(v.x, v.z, tx, tz);
+    units.sort((a, b) => a.ai.dist - b.ai.dist);
+    let flankers = 0;
+    units.forEach((v, k) => {
+      const d = v.ai.dist;
+      const los = d < 80 && g.collision.lineOfSight(v.x, 1.2, v.z, tx, 1.2, tz);
+      let t;
+      if (this.unseen > 1.5) t = 'SEARCH';
+      else if (!p.vehicle) t = d < 30 ? 'FOOT' : 'CLOSE';
+      else if (d < 32 && (los || d < 14)) t = 'RAM';
+      else if (los && k > 0 && flankers < 2) { t = 'FLANK'; flankers++; }
+      else t = 'CLOSE';
+      if (t === 'RAM' && v.ai.tactic !== 'RAM' && this.rng() < 0.3) this.radio(`${v.ai.callSign}: making contact, going to ram.`);
+      v.ai.tactic = t;
+    });
+  }
+
+  /** Two cruisers parked across the road a junction or two ahead of the suspect, with armed officers behind them. */
+  placeRoadblock(force) {
+    const g = this.game, p = g.player, pv = p.vehicle;
+    if (!pv) return null;
+    const d = dirOfHeading(pv.heading);
+    let [i, j] = nearestNode(pv.x, pv.z);
+    const ahead = (i * PITCH - pv.x) * DIRS[d][0] + (j * PITCH - pv.z) * DIRS[d][1];
+    const n = force || (ahead > 35 ? 1 : 2);
+    i += DIRS[d][0] * n; j += DIRS[d][1] * n;
+    if (!nodeValid(i, j)) return null;
+    const bx = i * PITCH - DIRS[d][0] * 16, bz = j * PITCH - DIRS[d][1] * 16;
+    if (g.collision.pointBlocked(bx, bz) || dist(bx, bz, pv.x, pv.z) < 40) return null;
+    const perp = [-DIRS[d][1], DIRS[d][0]];
+    const sign = this.nextCallSign();
+    const block = { x: bx, z: bz, cars: [], cops: [], callSign: sign, t: 0, dir: d };
+    for (const side of [-1, 1]) {
+      const car = new Vehicle('interceptor', bx + perp[0] * side * 3.1, bz + perp[1] * side * 3.1, headingOfDir(d) + Math.PI / 2 + side * 0.3);
+      car.ai = { kind: 'roadblock', callSign: sign, tactic: 'ROADBLOCK' };
+      car.sirenOn = true; car.input.handbrake = true;
+      g.vehicles.push(car); block.cars.push(car);
+      const cop = new Human('cop', bx - DIRS[d][0] * 4 + perp[0] * side * 5.5, bz - DIRS[d][1] * 4 + perp[1] * side * 5.5, 0, [0.12, 0.17, 0.32]);
+      cop.weapon = this.stars >= 4 ? 'smg' : 'pistol';
+      cop.ai = { mode: 'chase', burst: 0, strafe: side, hold: true };
+      cop.heading = headingOfDir((d + 2) % 4);
+      g.humans.push(cop); block.cops.push(cop);
+    }
+    this.roadblocks.push(block);
+    this.radio(`${sign}: roadblock set ${HEADINGS[d]} in ${this.placeName()}.`);
+    return block;
+  }
+
+  updateRoadblocks(dt) {
+    const g = this.game, p = g.player;
+    for (const b of this.roadblocks) {
+      b.t += dt;
+      if (b.t > 8 && dist(b.x, b.z, p.x, p.z) > 170) {
+        b.gone = true;
+        g.vehicles = g.vehicles.filter((v) => !b.cars.includes(v) || v.driver === p);
+        for (const c of b.cops) if (c.state !== 'dead') c.gone = true;
+      }
+    }
+    this.roadblocks = this.roadblocks.filter((b) => !b.gone);
+    while (this.roadblocks.length > 2) {
+      const old = this.roadblocks.shift();
+      for (const v of old.cars) if (v.ai && v.ai.kind === 'roadblock') { v.ai = { kind: 'parked' }; v.sirenOn = false; }
+    }
+  }
+
+  /** Everything the dispatch panel lists: call sign, kind, distance and tactic, nearest first. */
+  dispatchList() {
+    const g = this.game, p = g.player;
+    const rows = [];
+    for (const v of g.vehicles) {
+      if (v.ai && v.ai.kind === 'police' && v.driver && v.state === 'ok') rows.push({ sign: v.ai.callSign || 'UNIT', kind: 'car', d: dist(v.x, v.z, p.x, p.z), tactic: v.ai.tactic || 'CLOSE' });
+    }
+    for (const b of this.roadblocks) rows.push({ sign: b.callSign, kind: 'block', d: dist(b.x, b.z, p.x, p.z), tactic: 'ROADBLOCK' });
+    const h = this.heli;
+    if (h && h.hp > 0 && this.stars >= 3) rows.push({ sign: h.callSign || 'HALO-1', kind: 'heli', d: dist(h.x, h.z, p.x, p.z), tactic: this.stars >= 4 && h.spotOn ? 'GUNNER' : h.spotOn || this.unseen < 1.2 ? 'SPOTLIGHT' : 'SEARCH' });
+    let foot = 0, footD = Infinity;
+    for (const c of g.humans) if (c.role === 'cop' && c.state !== 'dead' && !c.vehicle && c.ai && c.ai.mode === 'chase') { foot++; footD = Math.min(footD, dist(c.x, c.z, p.x, p.z)); }
+    if (foot) rows.push({ sign: `FOOT x${foot}`, kind: 'foot', d: footD, tactic: this.stars === 1 ? 'CUFF' : 'FOOT' });
+    rows.sort((a, b) => a.d - b.d);
+    return rows;
   }
 
   /** Siren light bars as glowing billboards plus coloured point lights. */

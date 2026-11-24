@@ -11,6 +11,16 @@ export const STATIONS = [
 ];
 const TITLE = { name: 'Title', bpm: 92, root: 52, scale: [0, 2, 3, 5, 7, 8, 10], prog: [[0, 3, 7], [-4, 0, 3], [-2, 2, 5], [-7, -4, 0]], style: 'title', seed: 5 };
 
+// Three songs per station: each one reseeds the melody generator, so a new title really is a new tune.
+const SONGS = [
+  [{ title: 'Neon Undertow', artist: 'Vela Static' }, { title: 'Midnight on Meridian', artist: 'The Glass Palms' }, { title: 'Chrome Sunrise', artist: 'Kitty Overdrive' }],
+  [{ title: 'Harbor Lights, Slow', artist: 'Saltmarsh Kid' }, { title: 'Rain on Pier 9', artist: 'Mono Lagoon' }, { title: 'Night Shift Ferry', artist: 'Little Anchor' }],
+  [{ title: 'Mango Thunder', artist: 'Los Coralitos' }, { title: 'Sunfall Sway', artist: 'DJ Pelicano' }, { title: 'Calle Caliente', artist: 'Brisa All-Stars' }],
+];
+STATIONS.forEach((st, k) => { st.songs = SONGS[k].map((s, n) => ({ ...s, seed: st.seed * 7 + n * 131 })); });
+/** Steps per song: 24 bars of sixteenths. */
+const SONG_STEPS = 384;
+
 export class Radio {
   constructor(audio) {
     this.audio = audio;
@@ -22,6 +32,24 @@ export class Radio {
     this.bus = null;
     this.patterns = new Map();
     this.onChange = null;
+    this.onSong = null;
+    this.song = STATIONS.map(() => 0);
+    this.songStep = 0;
+  }
+
+  /** What the HUD shows: station, song and artist for the current dial position. */
+  nowPlaying() {
+    if (this.index < 0) return null;
+    const st = STATIONS[this.index];
+    const song = st.songs[this.song[this.index] % st.songs.length];
+    return { station: st.name, tag: st.tag, title: song.title, artist: song.artist, progress: this.songStep / SONG_STEPS };
+  }
+
+  nextSong() {
+    if (this.index < 0) return;
+    this.song[this.index] = (this.song[this.index] + 1) % STATIONS[this.index].songs.length;
+    this.songStep = 0;
+    if (this.onSong) this.onSong(this.nowPlaying());
   }
 
   ensureBus() {
@@ -37,8 +65,10 @@ export class Radio {
 
   /** Melody and bass lines generated once per station from its seed. */
   patternFor(st) {
-    if (this.patterns.has(st)) return this.patterns.get(st);
-    const rng = makeRng(st.seed);
+    const k = st.songs ? this.song[STATIONS.indexOf(st)] % st.songs.length : 0;
+    const key = st.songs ? st.songs[k] : st;
+    if (this.patterns.has(key)) return this.patterns.get(key);
+    const rng = makeRng(key.seed);
     const lead = [];
     for (let bar = 0; bar < 4; bar++) {
       const row = [];
@@ -49,7 +79,7 @@ export class Radio {
       lead.push(row);
     }
     const p = { lead };
-    this.patterns.set(st, p);
+    this.patterns.set(key, p);
     return p;
   }
 
@@ -100,6 +130,7 @@ export class Radio {
       if (this.on || this.bus.gain.value > 0.01) this.scheduleStep(st, this.step, this.nextTime, stepDur);
       this.nextTime += stepDur * (st.style === 'lofi' && this.step % 2 === 0 ? 1.12 : st.style === 'lofi' ? 0.88 : 1);
       this.step = (this.step + 1) % 256;
+      if (st !== TITLE && ++this.songStep >= SONG_STEPS) this.nextSong();
     }
   }
 

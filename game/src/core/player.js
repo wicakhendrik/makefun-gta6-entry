@@ -1,7 +1,7 @@
 // Player controls: running and aiming on foot, stealing and driving cars, drive-bys, weapon wheel, bailing out.
 
 import { clamp, dist2 } from '../engine/math.js';
-import { WEAPONS, WEAPON_ORDER } from '../combat/combat.js';
+import { WEAPONS, WEAPON_ORDER, magOf, startReload } from '../combat/combat.js';
 
 export class PlayerController {
   constructor(game) {
@@ -17,6 +17,7 @@ export class PlayerController {
     g.camera.look(inp.mouseDX + inp.axis('ArrowLeft', 'ArrowRight') * dt * 700, inp.mouseDY + inp.axis('ArrowUp', 'ArrowDown') * dt * 400, g.settings.sensitivity);
 
     this.handleWeaponSwitch(inp);
+    this.handleReload(dt, inp);
     if (inp.pressed('KeyF') || inp.pressed('Enter')) {
       if (p.vehicle) this.exitVehicle(); else this.tryEnterVehicle();
     }
@@ -30,11 +31,29 @@ export class PlayerController {
     let idx = owned.indexOf(p.weapon);
     if (inp.wheel > 0 || inp.pressed('KeyE')) idx = (idx + 1) % owned.length;
     if (inp.wheel < 0 || inp.pressed('KeyQ')) idx = (idx - 1 + owned.length) % owned.length;
-    for (let k = 1; k <= 5; k++) {
-      if (inp.pressed('Digit' + k)) { const w = WEAPON_ORDER[k - 1]; if (owned.includes(w)) idx = owned.indexOf(w); }
+    for (let k = 1; k <= WEAPON_ORDER.length; k++) {
+      if (inp.pressed('Digit' + k)) {
+        const w = WEAPON_ORDER[k - 1];
+        if (owned.includes(w)) idx = owned.indexOf(w);
+        else this.game.hud.lockedSlot = { slot: k - 1, t: 1.2 };
+      }
     }
     const next = owned[Math.max(0, idx)];
-    if (next !== p.weapon) { p.weapon = next; this.game.audio.weaponSwitch(); this.game.hud.flashWeapon(); }
+    if (next !== p.weapon) { p.weapon = next; p.reloading = 0; this.game.audio.weaponSwitch(); this.game.hud.flashWeapon(); }
+  }
+
+  /** R reloads by hand; the clip refills when the reload timer runs out. */
+  handleReload(dt, inp) {
+    const p = this.p;
+    if (inp.pressed('KeyR')) startReload(p, this.game);
+    if (p.reloading > 0) {
+      p.reloading -= dt;
+      if (p.reloading <= 0) {
+        p.reloading = 0;
+        const w = p.reloadWeapon, spec = WEAPONS[w];
+        if (spec && !spec.melee) { magOf(p, w); p.mag[w] = Math.min(spec.clip, p.ammo[w] || 0); }
+      }
+    }
   }
 
   walk(dt, inp) {
@@ -72,7 +91,7 @@ export class PlayerController {
     const g = this.game, p = this.p;
     if (this.shotTimer > 0) this.shotTimer -= dt;
     const w = WEAPONS[p.weapon];
-    if (p.vehicle && (w.melee || w.pellets > 1 || p.weapon === 'rifle')) return; // drive-by: pistol and SMG only
+    if (p.vehicle && (w.melee || w.pellets > 1 || w.rocket || p.weapon === 'rifle')) return; // drive-by: pistol and SMG only
     const trigger = w.auto ? inp.buttons[0] : inp.clicks[0];
     if (!trigger || p.fireCooldown > 0) return;
     if (!inp.locked && !g.shotMode && g.input.wantLock) return;

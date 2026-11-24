@@ -46,6 +46,7 @@ export function applySave(game, data) {
   game.missions.done = new Set(data.missions || []);
   p.weapons = new Set(data.weapons || []);
   p.ammo = data.ammo || {};
+  p.mag = {}; p.reloading = 0;
   p.hp = data.hp ?? 100; p.armor = data.armor ?? 0;
   if (data.pos) { p.x = data.pos.x; p.z = data.pos.z; }
   game.activities.exported = new Set(data.exported || []);

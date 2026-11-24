@@ -8,7 +8,7 @@ import { VEHICLE_TYPES } from '../entities/vehicles.js';
 const CONTROLS = [
   ['W A S D', 'Move / drive'], ['Mouse', 'Look and aim'], ['Left click', 'Shoot / punch'], ['Right click', 'Aim down sights'],
   ['Shift', 'Sprint'], ['F or Enter', 'Steal / enter / exit a vehicle'], ['Space', 'Handbrake'], ['H', 'Horn'],
-  ['Q / E / wheel / 1-5', 'Switch weapon'], ['E', 'Interact (shops, races, garage, save)'], ['N / B', 'Next / previous radio station'],
+  ['Q / E / wheel / 1-7', 'Switch weapon'], ['R', 'Reload'], ['Z / X / C', 'Crew: Lou repair, Teo bribe, Nyla supply drop'], ['E', 'Interact (shops, races, garage, save)'], ['N / B', 'Next / previous radio station'],
   ['G', 'Siren (police cars)'], ['M or Tab', 'Map'], ['Esc / P', 'Pause'],
 ];
 
@@ -161,7 +161,7 @@ export class MenuSystem {
       SHOP_ITEMS.forEach((it, k) => {
         const owned = WEAPONS[it.id] && g.player.weapons.has(it.id);
         const price = owned ? it.ammo : it.price;
-        const label = owned ? `${WEAPONS[it.id].name} ammo` : it.label;
+        const label = owned ? (WEAPONS[it.id].melee ? `${WEAPONS[it.id].name} (owned)` : `${WEAPONS[it.id].name} ammo`) : it.label;
         list.appendChild(this.button(`${k + 1}. ${label}`, () => this.buy(it), `$${price.toLocaleString()}`));
       });
       list.appendChild(this.button('Leave', () => this.back()));
@@ -177,11 +177,12 @@ export class MenuSystem {
     const isWeapon = !!WEAPONS[item.id];
     const owned = isWeapon && p.weapons.has(item.id);
     const price = owned ? item.ammo : item.price;
+    if (owned && WEAPONS[item.id].melee) { g.audio.ui('back'); g.hud.toast('You already carry one'); return; }
     if (g.money < price) { g.audio.ui('back'); g.hud.toast('Not enough cash'); return; }
     g.money -= price;
     if (item.id === 'armor') p.armor = 100;
     else if (item.id === 'health') p.hp = p.maxHp;
-    else { p.weapons.add(item.id); p.ammo[item.id] = (p.ammo[item.id] || 0) + WEAPONS[item.id].ammoPack; if (!owned) p.weapon = item.id; }
+    else { p.weapons.add(item.id); if (!WEAPONS[item.id].melee) p.ammo[item.id] = (p.ammo[item.id] || 0) + WEAPONS[item.id].ammoPack; if (!owned) p.weapon = item.id; }
     g.audio.ui('cash');
     g.hud.toast('Purchased: ' + (owned ? WEAPONS[item.id].name + ' ammo' : item.label));
     this.render();

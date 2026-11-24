@@ -24,10 +24,12 @@ export const TOKEN_SPOTS = [
 export const SHOP_ITEMS = [
   { id: 'armor', label: 'Body armor (full)', price: 300 },
   { id: 'health', label: 'First-aid kit (full health)', price: 150 },
+  { id: 'bat', label: 'Palmwood bat (melee)', price: 250, ammo: 0 },
   { id: 'pistol', label: 'Hornet 9 pistol / +36 ammo', price: 400, ammo: 200 },
   { id: 'smg', label: 'Wasp MP submachine gun / +90 ammo', price: 1500, ammo: 300 },
   { id: 'shotgun', label: 'Mako 12 shotgun / +16 shells', price: 2200, ammo: 300 },
   { id: 'rifle', label: 'Sable AR rifle / +60 ammo', price: 4500, ammo: 400 },
+  { id: 'launcher', label: 'Comet RL rocket launcher / +4 rockets', price: 9000, ammo: 1200 },
 ];
 
 export class ActivitySystem {

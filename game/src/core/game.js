@@ -25,6 +25,7 @@ import { resolveVehicleHumanContacts } from '../systems/contacts.js';
 import { MissionSystem } from '../story/missions.js';
 import { ActivitySystem } from '../story/activities.js';
 import { TaxiJobs } from '../story/taxi.js';
+import { CrewSystem } from '../systems/crew.js';
 import { AudioEngine } from '../audio/sfx.js';
 import { Radio } from '../audio/music.js';
 import { Hud } from '../ui/hud.js';
@@ -63,11 +64,13 @@ export class Game {
     this.missions = new MissionSystem(this);
     this.activities = new ActivitySystem(this);
     this.taxi = new TaxiJobs(this);
+    this.crew = new CrewSystem(this);
     this.hud = new Hud(this, hudCanvas);
     this.menus = new MenuSystem(this);
     this.playerCtl = new PlayerController(this);
     this.player.controller = this.playerCtl;
     this.radio.onChange = (st) => this.hud.showStation(st);
+    this.radio.onSong = () => this.hud.showSong();
     this.accum = 0;
     this.deathTimer = 0;
     this.ferrisAngle = 0;
@@ -100,6 +103,8 @@ export class Game {
     const p = new Human('player', POI.safehouse.x, POI.safehouse.z + 3, 0, hexColor('#1fb5a8'));
     p.weapons = new Set();
     p.ammo = {};
+    p.mag = {};
+    p.reloading = 0;
     p.heading = Math.PI;
     this.humans.push(p);
     return p;
@@ -154,6 +159,8 @@ export class Game {
     this.missions.active = null;
     this.activities.race = null;
     this.taxi.active = false; this.taxi.fare = null;
+    this.combat.rockets = [];
+    this.crew.reset();
     this.traffic.spawnParked();
     const p = this.player;
     Object.assign(p, { hp: 100, armor: 0, state: 'walk', vehicle: null, vx: 0, vz: 0, y: 0, weapon: 'fist' });
@@ -169,7 +176,7 @@ export class Game {
     this.activities.bestTimes = {};
     Object.assign(this.stats, { kills: 0, stolen: 0, wrecked: 0, driven: 0, walked: 0, missions: 0 });
     const p = this.player;
-    p.weapons = new Set(); p.ammo = {};
+    p.weapons = new Set(); p.ammo = {}; p.mag = {}; p.reloading = 0;
     p.x = POI.safehouse.x; p.z = POI.safehouse.z + 3; p.heading = Math.PI;
     this.startPlaying();
     this.hud.bigMessage('PORT SOLARA', 'Five years gone. The city kept the lights on.', '#ff6ac1');
@@ -328,6 +335,8 @@ export class Game {
     this.traffic.update(dt);
     this.peds.update(dt);
     this.police.update(dt);
+    this.combat.update(dt);
+    this.crew.update(dt);
     this.gangs.update(dt);
     this.missions.update(dt);
     this.activities.update(dt);
@@ -370,6 +379,7 @@ export class Game {
     this.fx.emitLights(r);
     this.police.renderSirens(r, right, upN);
     this.addStreetLights(r, env, right, upN);
+    this.combat.render(r, right, upN);
     this.fx.render(r, right, upN);
     this.missions.render(r, right, upN);
     if (this.state !== 'title') { this.activities.render(r, right, upN); this.taxi.render(r, right, upN); }
