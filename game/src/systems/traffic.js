@@ -19,7 +19,7 @@ export class TrafficSystem {
   spawnParked() {
     const g = this.game;
     for (const spot of g.city.parking) {
-      const type = this.rng.pick(['bayside', 'cub', 'riviera', 'ranchero', 'vanta', 'hauler', 'cub', 'bayside']);
+      const type = this.rng.pick(['bayside', 'cub', 'riviera', 'ranchero', 'vanta', 'hauler', 'cub', 'bayside', 'cab']);
       const v = new Vehicle(type, spot.x, spot.z, spot.heading, this.rng.pick(VEHICLE_TYPES[type].colors));
       v.parked = true;
       v.persistent = true;

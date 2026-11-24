@@ -24,6 +24,7 @@ import { GangSystem } from '../systems/gangs.js';
 import { resolveVehicleHumanContacts } from '../systems/contacts.js';
 import { MissionSystem } from '../story/missions.js';
 import { ActivitySystem } from '../story/activities.js';
+import { TaxiJobs } from '../story/taxi.js';
 import { AudioEngine } from '../audio/sfx.js';
 import { Radio } from '../audio/music.js';
 import { Hud } from '../ui/hud.js';
@@ -61,6 +62,7 @@ export class Game {
     this.gangs = new GangSystem(this);
     this.missions = new MissionSystem(this);
     this.activities = new ActivitySystem(this);
+    this.taxi = new TaxiJobs(this);
     this.hud = new Hud(this, hudCanvas);
     this.menus = new MenuSystem(this);
     this.playerCtl = new PlayerController(this);
@@ -151,6 +153,7 @@ export class Game {
     this.police.heli = null;
     this.missions.active = null;
     this.activities.race = null;
+    this.taxi.active = false; this.taxi.fare = null;
     this.traffic.spawnParked();
     const p = this.player;
     Object.assign(p, { hp: 100, armor: 0, state: 'walk', vehicle: null, vx: 0, vz: 0, y: 0, weapon: 'fist' });
@@ -328,6 +331,7 @@ export class Game {
     this.gangs.update(dt);
     this.missions.update(dt);
     this.activities.update(dt);
+    this.taxi.update(dt);
     // drop anyone whose physics went non-finite rather than letting NaN spread
     this.humans = this.humans.filter((h) => (!h.gone && Number.isFinite(h.x) && Number.isFinite(h.z)) || h === p);
     this.vehicles = this.vehicles.filter((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
@@ -368,7 +372,7 @@ export class Game {
     this.addStreetLights(r, env, right, upN);
     this.fx.render(r, right, upN);
     this.missions.render(r, right, upN);
-    if (this.state !== 'title') this.activities.render(r, right, upN);
+    if (this.state !== 'title') { this.activities.render(r, right, upN); this.taxi.render(r, right, upN); }
     r.render(env, this.time);
     this.hud.draw();
   }

@@ -118,6 +118,25 @@ export function runSelfTest(g) {
   log('race after 40s', g.activities.race ? `cp ${g.activities.race.cp} pos ${g.activities.racePosition()}` : 'finished', 'best', JSON.stringify(g.activities.bestTimes));
   g.autopilot = null;
 
+  // 7b. taxi fares
+  if (p.vehicle) g.playerCtl.exitVehicle();
+  g.police.clear(); g.missions.active = null;
+  const cab = g.spawnVehicle('cab', p.x + 3, p.z, 0);
+  p.x = cab.x + 2.5; p.z = cab.z; press(g, 'KeyF'); run(g, 0.2);
+  press(g, 'KeyE'); run(g, 0.1);
+  log('taxi on duty', g.taxi.active, 'phase', g.taxi.fare && g.taxi.fare.phase);
+  if (g.taxi.fare) {
+    const f = g.taxi.fare;
+    cab.x = f.passenger.x + 3; cab.z = f.passenger.z; cab.vx = cab.vz = 0;
+    run(g, 0.2);
+    log('taxi after reaching passenger', f.phase, 'to', f.destName, 'timer', f.timer);
+    cab.x = f.x + 2; cab.z = f.z; cab.vx = cab.vz = 0;
+    const before = g.money;
+    run(g, 0.2);
+    log('taxi paid', g.money - before, 'streak', g.taxi.streak, 'next phase', g.taxi.fare && g.taxi.fare.phase);
+  }
+  g.taxi.stop(null);
+
   // 8. shop and save
   g.money += 5000;
   g.menus.open('shop'); g.menus.buy({ id: 'smg', price: 1500, ammo: 300 }); g.menus.close();

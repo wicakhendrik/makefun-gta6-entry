@@ -143,6 +143,7 @@ export class MenuSystem {
         <tr><td class="k">Exports</td><td>${a.exported.size}/${EXPORT_LIST.length} · wanted: ${EXPORT_LIST.filter((t) => !a.exported.has(t)).map((t) => VEHICLE_TYPES[t].name).join(', ') || 'all delivered'}</td></tr>
         <tr><td class="k">Sun Tokens</td><td>${a.tokens.size}/${TOKEN_SPOTS.length}</td></tr>
         <tr><td class="k">Races</td><td>${RACES.map((r) => `${r.name}: ${a.bestTimes[r.id] ? a.bestTimes[r.id].toFixed(1) + 's' : '—'}`).join(' · ')}</td></tr>
+        <tr><td class="k">Brisa Cab</td><td>best streak ${Math.max(g.taxi.best, g.taxi.streak)} fares</td></tr>
         <tr><td class="k">Weapons</td><td>${[...g.player.weapons].map((w) => WEAPONS[w].name).join(', ') || 'fists'}</td></tr>
         <tr><td class="k">Takedowns</td><td>${st.kills} · cars stolen ${st.stolen} · wrecked ${st.wrecked}</td></tr>
         <tr><td class="k">Distance</td><td>${(st.driven / 1000).toFixed(1)} km driven · ${(st.walked / 1000).toFixed(1)} km on foot</td></tr>

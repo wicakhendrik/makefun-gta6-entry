@@ -33,7 +33,7 @@ export class MissionSystem {
     this.markerPulse += dt;
     if (this.cooldown > 0) this.cooldown -= dt;
     if (!this.active) {
-      if (this.cooldown > 0 || !p.alive || g.activities.busy) return;
+      if (this.cooldown > 0 || !p.alive || g.activities.busy || g.taxi.active) return;
       for (const m of this.available()) {
         const poi = POI[CONTACTS[m.giver].poi];
         if (dist2(p.x, p.z, poi.x, poi.z) < 3.2 * 3.2 + (p.vehicle ? 16 : 0) && (!p.vehicle || p.vehicle.speed < 6)) { this.start(m); break; }

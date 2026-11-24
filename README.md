@@ -30,7 +30,8 @@ No libraries, no downloaded assets, no network requests.
   three stars. Break line of sight to make them lose you, or pay Lou for a respray.
 - **Story and missions**: six story missions with dialogue (stealing to order, a car chase, a dockside
   gunfight, a betrayal and a finale against Crane's limousine and bodyguards).
-- **Activities**: two street races against AI drivers, Lou's export list, twelve hidden Sun Tokens,
+- **Activities**: two street races against AI drivers, Brisa Cab taxi fares with streak bonuses (press E in
+  any cab), Lou's export list, twelve hidden Sun Tokens,
   the Bolt & Barrel gun shop, pickups for health, armor and ammo, and cash for every job.
 - **Combat**: fists, pistol, SMG, shotgun and rifle with hitscan bullets, head shots, tracers, muzzle flashes,
   drive-by shooting from cars and blast damage.

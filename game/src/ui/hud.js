@@ -108,7 +108,7 @@ export class Hud {
       if ((h.role === 'goon' || h.role === 'boss') && h.state !== 'dead' && h.missionOwned) blips.push({ x: h.x, z: h.z, color: '#ff4040', size: 3.5, edge: true });
     }
     if (g.police.heli) blips.push({ x: g.police.heli.x, z: g.police.heli.z, shape: 'square', color: flash ? '#ff3a4a' : '#3a6aff', size: 4, edge: true });
-    const obj = g.missions.objectivePos() || g.activities.raceTarget();
+    const obj = g.missions.objectivePos() || g.activities.raceTarget() || g.taxi.target();
     if (obj) blips.push({ x: obj.x, z: obj.z, color: '#ffd24a', size: 6, edge: true, pulse: true, shape: obj.entity ? 'diamond' : undefined });
     return blips;
   }
@@ -116,7 +116,7 @@ export class Hud {
   /** Road-grid route from the player to the current objective, refreshed twice a second. */
   gpsRoute() {
     const g = this.game, p = g.player;
-    const obj = g.missions.objectivePos() || g.activities.raceTarget();
+    const obj = g.missions.objectivePos() || g.activities.raceTarget() || g.taxi.target();
     if (!obj) { this.route = null; return null; }
     if (this.route && g.time - this.routeTime < 0.5 && this.routeFor === obj) return this.route;
     this.routeTime = g.time; this.routeFor = obj;
