@@ -118,6 +118,25 @@ export class MissionSystem {
     this.active.timer = null;
   }
 
+  /** Mission tracker data: stage x/y over the steps that carry an objective, the current one and the next. */
+  progress() {
+    const a = this.active;
+    if (!a) return null;
+    const marked = [];
+    a.steps.forEach((s, k) => { if (s.text) marked.push(k); });
+    const total = Math.max(1, marked.length);
+    const doneCount = marked.filter((k) => k < a.index).length;
+    const stage = Math.min(total, doneCount + 1);
+    const cur = a.steps[a.index];
+    const nextIdx = marked.find((k) => k > a.index);
+    const giver = CONTACTS[a.def.giver];
+    return {
+      stage, total,
+      current: cur && cur.text ? cur.text : 'Listen to ' + giver.name.split(' ')[0] + '.',
+      next: nextIdx !== undefined ? a.steps[nextIdx].text : `Collect $${a.def.reward.toLocaleString('en-US')} from ${giver.name.split(' ')[0]}.`,
+    };
+  }
+
   /** The current target position for the HUD arrow and minimap. */
   objectivePos() {
     const a = this.active;

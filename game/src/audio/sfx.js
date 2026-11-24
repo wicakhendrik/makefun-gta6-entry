@@ -95,13 +95,17 @@ export class AudioEngine {
   gunshot(kind, x, z, isPlayer) {
     this.play(isPlayer ? undefined : x, z, 160, (t, out) => {
       const v = isPlayer ? 0.9 : 0.75;
-      if (kind === 'shotgun') { this.noiseBurst(t, 0.45, 'lowpass', 2400, 0.7, v * 1.1, out, 300); this.tone(t, 'sine', 120, 40, 0.25, v, out); }
+      if (kind === 'rocket') { this.noiseBurst(t, 0.9, 'lowpass', 900, 0.6, v * 1.2, out, 150); this.noiseBurst(t, 1.2, 'bandpass', 2400, 0.8, v * 0.35, out, 600); }
+      else if (kind === 'shotgun') { this.noiseBurst(t, 0.45, 'lowpass', 2400, 0.7, v * 1.1, out, 300); this.tone(t, 'sine', 120, 40, 0.25, v, out); }
       else if (kind === 'rifle') { this.noiseBurst(t, 0.22, 'bandpass', 1800, 0.9, v, out, 500); this.tone(t, 'square', 180, 60, 0.08, v * 0.4, out); }
       else if (kind === 'smg') { this.noiseBurst(t, 0.12, 'bandpass', 2600, 1.1, v * 0.8, out, 900); }
       else { this.noiseBurst(t, 0.2, 'bandpass', 2000, 1, v, out, 600); this.tone(t, 'triangle', 220, 70, 0.1, v * 0.5, out); }
     });
   }
 
+  reload() { this.play(undefined, 0, 1, (t, out) => { this.noiseBurst(t, 0.05, 'highpass', 2500, 1, 0.25, out); this.tone(t + 0.25, 'square', 700, 400, 0.05, 0.12, out); this.noiseBurst(t + 0.5, 0.06, 'bandpass', 1800, 2, 0.3, out); }); }
+  crewCall() { this.play(undefined, 0, 1, (t, out) => { [740, 988, 1175].forEach((f, k) => this.tone(t + k * 0.07, 'sine', f, f, 0.1, 0.16, out)); }); }
+  rankUp() { this.play(undefined, 0, 1, (t, out) => { [523, 659, 784, 1046, 1318].forEach((f, k) => this.tone(t + k * 0.08, 'triangle', f, f, 0.2, 0.18, out)); }); }
   dryFire() { this.play(undefined, 0, 1, (t, out) => this.tone(t, 'square', 1800, 1500, 0.03, 0.2, out)); }
   weaponSwitch() { this.play(undefined, 0, 1, (t, out) => { this.tone(t, 'square', 900, 700, 0.04, 0.12, out); this.tone(t + 0.06, 'square', 1200, 1000, 0.04, 0.1, out); }); }
   swing() { this.play(undefined, 0, 1, (t, out) => this.noiseBurst(t, 0.12, 'highpass', 1500, 0.5, 0.15, out, 4000)); }

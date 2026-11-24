@@ -123,6 +123,7 @@ export class TaxiJobs {
     this.streak++;
     const pay = Math.round(40 + f.distance * 0.35 + Math.max(0, f.timer) * 3) + this.streak * 25;
     g.money += pay;
+    g.events.emit('taxiFare', pay);
     this.earned += pay;
     g.audio.ui('cash');
     g.hud.toast(`Fare paid: $${pay}  (streak ${this.streak})`);

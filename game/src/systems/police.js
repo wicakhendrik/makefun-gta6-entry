@@ -3,12 +3,29 @@
 import { makeRng, dist, dist2, clamp, wrapAngle, modelEuler, modelYaw } from '../engine/math.js';
 import { Vehicle } from '../entities/vehicles.js';
 import { Human } from '../entities/humans.js';
-import { randomLaneSpot, nearestNode, routeDir, DIRS } from '../world/roads.js';
+import { randomLaneSpot, nearestNode, routeDir, DIRS, dirOfHeading } from '../world/roads.js';
 import { followRoad } from './traffic.js';
+import { RoadblockPlanner } from './roadblocks.js';
+import { DISTRICTS, districtAt } from '../world/city.js';
 
 export const STAR_HEAT = [1, 3, 7, 13, 22];
 const CRIME_HEAT = { gunfire: 0.35, assault: 0.7, hitped: 0.9, kill: 1.6, copkill: 4.5, carjack: 0.5, copcar: 0.5, explode: 1.6, copcarjack: 3.2 };
 const UNITS_BY_STARS = [0, 2, 3, 4, 6, 8];
+const BEATS = ['CORAL', 'HARBOR', 'MIDTOWN', 'CINDER', 'MERIDIAN', 'BRISA', 'SALT', 'PALM'];
+const ROLES = ['ram', 'flank', 'close', 'flank', 'ram', 'close'];
+const COMPASS = ['east', 'south', 'west', 'north'];
+
+/** Labels and colours for each pursuit tactic, shown on the dispatch panel. */
+export const TACTIC_INFO = {
+  ram: { label: 'RAMMING', color: '#ff5a5a' },
+  flank: { label: 'FLANKING', color: '#ffb03a' },
+  close: { label: 'CLOSING IN', color: '#ffe04a' },
+  roadblock: { label: 'ROADBLOCK', color: '#ff6ac1' },
+  spotlight: { label: 'SPOTLIGHT', color: '#ffffff' },
+  search: { label: 'SEARCHING', color: '#8fb4ff' },
+  foot: { label: 'ON FOOT', color: '#9fe3c8' },
+  down: { label: 'DISABLED', color: '#8a8a96' },
+};
 
 export class PoliceSystem {
   constructor(game) {
@@ -23,6 +40,10 @@ export class PoliceSystem {
     this.bustTimer = 0;
     this.flashT = 0;
     this.patrolTimer = 5;
+    this.jam = 0;
+    this.unitCount = 0;
+    this.roadblocks = new RoadblockPlanner(this);
+    game.events.on('wantedUp', (n) => { if (n >= 2) this.radio(`All units, ${this.suspectLine()}. Code ${n === 2 ? 'two' : 'three'}.`); });
     game.events.on('gunfire', (shooter, x, z) => { if (shooter.isPlayer && this.witnesses(x, z, 45)) this.crime('gunfire'); });
     game.events.on('humanKilled', (h, attacker) => {
       if (!attacker || !attacker.isPlayer) return;
@@ -32,6 +53,39 @@ export class PoliceSystem {
     game.events.on('humanHurt', (h, attacker, kind) => {
       if (attacker && attacker.isPlayer && (h.role === 'civ' || h.role === 'cop') && kind !== 'vehicle') this.crime(h.role === 'cop' ? 'copkill' : 'assault', h.role === 'cop' ? 0.25 : 1);
     });
+  }
+
+  /** A dispatcher line in the dialogue box, only when nobody else is talking. */
+  radio(text) {
+    const hud = this.game.hud;
+    if (hud && !hud.dialogueBusy && !this.game.shotMode) hud.queueDialogue([{ who: 'DISPATCH', text }]);
+  }
+
+  suspectLine() {
+    const p = this.game.player, v = p.vehicle;
+    const d = districtAt(p.x, p.z);
+    const where = d && DISTRICTS[d] ? DISTRICTS[d].name : 'the city';
+    const dir = COMPASS[dirOfHeading(v ? v.heading : p.heading)];
+    return v ? `suspect heading ${dir} through ${where} in a ${v.spec.name}` : `suspect on foot in ${where}`;
+  }
+
+  nextCallsign() {
+    const n = this.unitCount++;
+    return `${BEATS[n % BEATS.length]}-${12 + ((n * 7) % 37)}`;
+  }
+
+  /** Units the dispatch panel lists: cars with call sign, distance and current tactic, plus the helicopter. */
+  dispatchUnits() {
+    const g = this.game, p = g.player, out = [];
+    for (const v of g.vehicles) {
+      if (!v.ai || (v.ai.kind !== 'police' && v.ai.kind !== 'roadblock') || !v.callsign) continue;
+      const tactic = v.state !== 'ok' ? 'down' : v.ai.kind === 'roadblock' ? 'roadblock' : v.ai.deployed ? 'foot' : v.ai.tactic || 'close';
+      out.push({ call: v.callsign, dist: dist(v.x, v.z, p.x, p.z), tactic, kind: 'car' });
+    }
+    const h = this.heli;
+    if (h && h.hp > 0 && this.stars >= 3) out.push({ call: 'AIR ONE', dist: Math.hypot(h.x - p.x, h.z - p.z, h.y), tactic: h.spotOn ? 'spotlight' : 'search', kind: 'air' });
+    out.sort((a, b) => a.dist - b.dist);
+    return out;
   }
 
   get wantedTimeout() { return 9 + this.stars * 3.5; }
@@ -72,6 +126,8 @@ export class PoliceSystem {
 
   clear() {
     this.heat = 0; this.stars = 0; this.unseen = 0; this.bustTimer = 0;
+    this.jam = 0;
+    this.roadblocks.clear();
     for (const v of this.game.vehicles) if (v.ai && v.ai.kind === 'police') { v.ai.kind = 'traffic'; v.ai.cruise = 12; v.sirenOn = false; v.ai.panic = 0; v.ai.stuck = 0; v.ai.ignore = 0; }
     for (const h of this.game.humans) if (h.role === 'cop') h.ai.mode = 'leave';
   }
@@ -79,6 +135,8 @@ export class PoliceSystem {
   update(dt) {
     const g = this.game, p = g.player;
     this.flashT += dt;
+    if (this.jam > 0) this.jam -= dt;
+    this.roadblocks.update(dt);
     if (this.stars > 0) {
       const seen = this.isPlayerSeen();
       if (seen) { this.unseen = 0; this.lastSeen = { x: p.x, z: p.z }; }
@@ -91,7 +149,7 @@ export class PoliceSystem {
       this.spawnTimer -= dt;
       const units = g.vehicles.filter((v) => v.ai && v.ai.kind === 'police').length;
       if (units < UNITS_BY_STARS[this.stars] && this.spawnTimer <= 0) { this.spawnUnit(); this.spawnTimer = 2.5; }
-      if (this.stars >= 3 && !this.heli) this.spawnHeli();
+      if (this.stars >= 3 && !this.heli) { this.spawnHeli(); this.radio('AIR ONE is up. Lighting the suspect for ground units.'); }
     }
     // occasional patrol car in normal traffic
     this.patrolTimer -= dt;
@@ -115,7 +173,12 @@ export class PoliceSystem {
   isPlayerSeen() {
     const g = this.game, p = g.player;
     const py = p.vehicle ? 1.2 : 1.5;
-    if (this.heli && this.heli.hp > 0 && dist2(this.heli.x, this.heli.z, p.x, p.z) < 70 * 70) return true;
+    if (this.jam > 0) {
+      // the crew's scanner jam: only officers right next to the suspect still know where he is
+      for (const h of g.humans) if (h.role === 'cop' && h.state !== 'dead' && dist2(h.x, h.z, p.x, p.z) < 8 * 8) return true;
+      return false;
+    }
+    if (this.heli && this.heli.hp > 0 && this.heli.spotOn) return true;
     for (const v of g.vehicles) {
       if (!v.spec.police || !v.driver || v.state !== 'ok') continue;
       const d2 = dist2(v.x, v.z, p.x, p.z);
@@ -138,6 +201,9 @@ export class PoliceSystem {
     const v = new Vehicle('interceptor', spot.x, spot.z, spot.heading);
     v.ai = { kind: 'police', i: spot.i, j: spot.j, d: spot.d, next: spot.d, stuck: 0, ignore: 0, deployed: false, reverse: 0 };
     v.sirenOn = true;
+    v.callsign = this.nextCallsign();
+    v.ai.role = ROLES[(this.unitCount - 1) % ROLES.length];
+    v.ai.tactic = 'close';
     const cop = new Human('cop', v.x, v.z, 0, [0.12, 0.17, 0.32]);
     cop.vehicle = v; cop.state = 'driving'; v.driver = cop;
     v.crew = 1;
@@ -164,7 +230,23 @@ export class PoliceSystem {
       if (v.speed < 2 && !ai.deployed) { ai.deployed = true; this.deployOfficers(v); }
       return;
     }
-    if (los || d < 25) {
+    const searching = this.jam > 0 || this.unseen > 2.5;
+    ai.tactic = searching ? 'search' : (los && d < 32) || (ai.role === 'ram' && d < 60 && los) ? 'ram' : ai.role === 'flank' && p.vehicle && d < 160 ? 'flank' : 'close';
+    if (ai.tactic === 'flank') {
+      // cut in from the side: aim at a point beside and ahead of the suspect's car
+      const pv = p.vehicle, side = ai.side || (ai.side = Math.random() < 0.5 ? 1 : -1);
+      const fx = Math.sin(pv.heading), fz = Math.cos(pv.heading);
+      const ax = tx + pv.vx * 1.4 + fz * side * 10, az = tz + pv.vz * 1.4 - fx * side * 10;
+      const da = dist(v.x, v.z, ax, az);
+      if (da < 70 && g.collision.lineOfSight(v.x, 1.2, v.z, ax, 1.2, az)) {
+        const ang = wrapAngle(Math.atan2(ax - v.x, az - v.z) - v.heading);
+        v.input.steer = clamp(ang * 2, -1, 1);
+        v.input.throttle = 1; v.input.handbrake = Math.abs(ang) > 1.2 && v.speed > 16;
+      } else {
+        const [ti, tj] = nearestNode(ax, az);
+        followRoad(v, ai, dt, g, { cruise: 30 + this.stars * 2, chooseNext: (i, j, dd) => routeDir(i, j, ti, tj, dd), careful: false });
+      }
+    } else if (!searching && (los || d < 25)) {
       const lead = p.vehicle ? 0.5 : 0.2;
       const px = tx + (p.vehicle ? p.vehicle.vx : p.vx) * lead, pz = tz + (p.vehicle ? p.vehicle.vz : p.vz) * lead;
       const ang = wrapAngle(Math.atan2(px - v.x, pz - v.z) - v.heading);
@@ -172,8 +254,9 @@ export class PoliceSystem {
       v.input.throttle = Math.abs(ang) > 1.6 && d < 12 ? -0.6 : 1;
       v.input.handbrake = Math.abs(ang) > 1.1 && v.speed > 14;
     } else {
-      const [ti, tj] = nearestNode(tx, tz);
-      followRoad(v, ai, dt, g, { cruise: 26 + this.stars * 2, chooseNext: (i, j, dd) => routeDir(i, j, ti, tj, dd), careful: false });
+      const sx = searching ? this.lastSeen.x : tx, sz = searching ? this.lastSeen.z : tz;
+      const [ti, tj] = nearestNode(sx, sz);
+      followRoad(v, ai, dt, g, { cruise: (searching ? 16 : 26) + this.stars * 2, chooseNext: (i, j, dd) => routeDir(i, j, ti, tj, dd), careful: false });
     }
     // unstick by reversing when pinned against something
     if (v.speed < 1 && Math.abs(v.input.throttle) > 0.5) ai.stuck += dt; else ai.stuck = 0;
@@ -221,7 +304,8 @@ export class PoliceSystem {
     }
     h.aimYaw = Math.atan2(dx, dz);
     let mx = 0, mz = 0;
-    if (!los || d > 26) { mx = dx * 4.8; mz = dz * 4.8; }
+    if (h.ai.hold && d > 30) { mx = 0; mz = 0; }
+    else if (!los || d > 26) { mx = dx * 4.8; mz = dz * 4.8; }
     else if (d < 7) { mx = -dx * 2.5; mz = -dz * 2.5; }
     else { mx = -dz * h.ai.strafe * 1.6; mz = dx * h.ai.strafe * 1.6; if (Math.random() < dt * 0.4) h.ai.strafe *= -1; }
     if (h.blocked) { const t = mx; mx = -mz; mz = t; }
@@ -232,7 +316,7 @@ export class PoliceSystem {
   spawnHeli() {
     const p = this.game.player;
     const a = Math.random() * Math.PI * 2;
-    this.heli = { x: p.x + Math.cos(a) * 180, z: p.z + Math.sin(a) * 180, y: 60, heading: 0, vx: 0, vz: 0, hp: 650, rotor: 0, orbit: a, fire: 2, crash: 0, model: new Float32Array(16), rotorModel: new Float32Array(16) };
+    this.heli = { spot: null, spotOn: false, x: p.x + Math.cos(a) * 180, z: p.z + Math.sin(a) * 180, y: 60, heading: 0, vx: 0, vz: 0, hp: 650, rotor: 0, orbit: a, fire: 2, crash: 0, model: new Float32Array(16), rotorModel: new Float32Array(16) };
   }
 
   updateHeli(dt) {
@@ -261,6 +345,7 @@ export class PoliceSystem {
     h.x += h.vx * dt; h.z += h.vz * dt;
     h.y += (34 - h.y) * Math.min(1, dt * 0.8);
     h.heading = Math.atan2(p.x - h.x, p.z - h.z);
+    this.trackSpotlight(h, dt);
     h.fire -= dt;
     if (this.stars >= 4 && h.fire <= 0 && p.alive) {
       h.fire = 0.14;
@@ -273,6 +358,40 @@ export class PoliceSystem {
       gunner.x = ox; gunner.z = oz; gunner.fireCooldown = 0;
       g.combat.fire(gunner, ox, oy, oz, ddx / n, ddy / n, ddz / n, ox, oy, oz);
     }
+  }
+
+  /** The helicopter's spotlight chases the suspect while the crew can see him and drifts off when they cannot. */
+  trackSpotlight(h, dt) {
+    const g = this.game, p = g.player;
+    if (!h.spot) h.spot = { x: h.x, z: h.z };
+    const py = p.vehicle ? 1.2 : 1.5;
+    const sees = this.jam <= 0 && g.collision.lineOfSight(h.x, h.y - 1.5, h.z, p.x, py, p.z);
+    const tx = sees ? p.x : this.lastSeen.x + Math.sin(this.flashT * 0.7) * 18;
+    const tz = sees ? p.z : this.lastSeen.z + Math.cos(this.flashT * 0.5) * 18;
+    const dx = tx - h.spot.x, dz = tz - h.spot.z, l = Math.hypot(dx, dz);
+    const sp = Math.min(l, (sees ? 26 : 9) * dt + l * Math.min(1, dt * 2.5));
+    if (l > 0.01) { h.spot.x += (dx / l) * sp; h.spot.z += (dz / l) * sp; }
+    h.spotOn = sees && dist(h.spot.x, h.spot.z, p.x, p.z) < 7;
+  }
+
+  /** Light cone from the helicopter to the ground: a chain of glowing billboards and a pool of light. */
+  renderSpotlight(r, env, right, up) {
+    const h = this.heli;
+    if (!h || h.hp <= 0 || !h.spot || this.stars < 3) return;
+    const k = 0.35 + env.night * 0.65;
+    const sx = h.spot.x, sz = h.spot.z;
+    const ox = h.x + Math.sin(h.heading) * 2, oy = h.y - 1.2, oz = h.z + Math.cos(h.heading) * 2;
+    const n = 18;
+    for (let i = 1; i <= n; i++) {
+      const t = i / n;
+      const x = ox + (sx - ox) * t, y = oy + (0.6 - oy) * t, z = oz + (sz - oz) * t;
+      const a = 0.05 + 0.05 * (1 - t);
+      r.billboard(x, y, z, 0.5 + t * 4.2, a * 2.2 * k, a * 2.15 * k, a * 1.9 * k, 0, right, up);
+    }
+    r.groundQuad(sx, sz, 0.09, 6.5, 6.5, 0, 0.55 * k, 0.55 * k, 0.48 * k, 0);
+    r.groundQuad(sx, sz, 0.1, 3.6, 3.6, 0, 0.45 * k, 0.45 * k, 0.4 * k, 0);
+    r.billboard(ox, oy, oz, 1.2, 2.5 * k, 2.4 * k, 2.1 * k, 0, right, up);
+    if (env.night > 0.3) r.addLight(sx, 7, sz, 14, 2.6, 2.6, 2.3);
   }
 
   /** Hit test for player bullets against the helicopter. */
@@ -292,10 +411,6 @@ export class PoliceSystem {
     const tilt = clamp(Math.hypot(h.vx, h.vz) * 0.01, 0, 0.25);
     r.draw(meshes.heli, modelEuler(h.model, h.x, h.y, h.z, h.heading, tilt, 0));
     r.draw(meshes.rotor, modelYaw(h.rotorModel, h.x, h.y + 3.0, h.z, h.rotor));
-    if (env.night > 0.3) {
-      const p = this.game.player;
-      r.addLight(p.x, 6, p.z, 16, 2.2, 2.2, 2.0);
-    }
   }
 
   /** Siren light bars as glowing billboards plus coloured point lights. */

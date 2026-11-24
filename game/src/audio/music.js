@@ -9,6 +9,15 @@ export const STATIONS = [
   { name: 'LOW TIDE 97.4', tag: 'Slow beats from the harbor', bpm: 78, root: 50, scale: [0, 3, 5, 7, 10], prog: [[0, 3, 7, 10], [5, 8, 12, 15], [-2, 2, 5, 9], [-5, -1, 2, 5]], style: 'lofi', seed: 23 },
   { name: 'BRISA FM 103.9', tag: 'Tropical heat, all day', bpm: 96, root: 55, scale: [0, 2, 4, 5, 7, 9, 11], prog: [[0, 4, 7], [-3, 0, 4], [-7, -3, 0], [-5, -1, 2]], style: 'tropical', seed: 37 },
 ];
+/** Each station's playlist: original song titles and acts; every song gets its own melody and key. */
+const PLAYLISTS = [
+  [['Neon Undertow', 'The Palm Static'], ['Midnight on Ocean Drive', 'Coral Vector'], ['Chrome Flamingo', 'Lisa Sunfall'], ['Heatwave Protocol', 'VHS Lagoon']],
+  [['Salt on the Window', 'Harbor Kids'], ['Ferry at 4 AM', 'Quiet Pelican'], ['Rust & Rain', 'Dockside Tapes'], ['Low Lantern', 'Mira Calma']],
+  [['Mango Riot', 'Los Faroles'], ['Brisa Bonita', 'Sol y Sal'], ['Two Steps from the Sea', 'Tamarind Club'], ['Pier Party', 'DJ Gaviota']],
+];
+PLAYLISTS.forEach((list, k) => { STATIONS[k].songs = list.map(([title, artist], i) => ({ title, artist, shift: [0, 3, -2, 5][i] })); });
+const BARS_PER_SONG = 24;
+
 const TITLE = { name: 'Title', bpm: 92, root: 52, scale: [0, 2, 3, 5, 7, 8, 10], prog: [[0, 3, 7], [-4, 0, 3], [-2, 2, 5], [-7, -4, 0]], style: 'title', seed: 5 };
 
 export class Radio {
@@ -22,6 +31,23 @@ export class Radio {
     this.bus = null;
     this.patterns = new Map();
     this.onChange = null;
+    this.onSong = null;
+    this.songOf = STATIONS.map(() => 0);
+    this.bars = 0;
+  }
+
+  /** The song on the station that is tuned in, or null when the radio is off. */
+  get nowPlaying() {
+    if (this.index < 0 || !STATIONS[this.index]) return null;
+    const st = STATIONS[this.index];
+    return { station: st, song: st.songs[this.songOf[this.index] % st.songs.length] };
+  }
+
+  nextSong() {
+    if (this.index < 0) return;
+    this.songOf[this.index] = (this.songOf[this.index] + 1) % STATIONS[this.index].songs.length;
+    this.patterns.delete(STATIONS[this.index]);
+    if (this.onSong) this.onSong(this.nowPlaying);
   }
 
   ensureBus() {
@@ -38,7 +64,8 @@ export class Radio {
   /** Melody and bass lines generated once per station from its seed. */
   patternFor(st) {
     if (this.patterns.has(st)) return this.patterns.get(st);
-    const rng = makeRng(st.seed);
+    const k = STATIONS.indexOf(st), song = k >= 0 ? this.songOf[k] : 0;
+    const rng = makeRng(st.seed + song * 101);
     const lead = [];
     for (let bar = 0; bar < 4; bar++) {
       const row = [];
@@ -48,7 +75,7 @@ export class Radio {
       }
       lead.push(row);
     }
-    const p = { lead };
+    const p = { lead, shift: k >= 0 ? st.songs[song % st.songs.length].shift : 0 };
     this.patterns.set(st, p);
     return p;
   }
@@ -86,7 +113,10 @@ export class Radio {
     this.audio.ui('move');
     this.notify();
   }
-  notify() { if (this.onChange) this.onChange(this.index < 0 ? { name: 'Radio Off', tag: '' } : STATIONS[this.index]); }
+  notify() {
+    this.bars = 0;
+    if (this.onChange) this.onChange(this.index < 0 ? { name: 'Radio Off', tag: '' } : STATIONS[this.index]);
+  }
 
   /** Schedule notes slightly ahead of the audio clock. */
   update() {
@@ -100,14 +130,15 @@ export class Radio {
       if (this.on || this.bus.gain.value > 0.01) this.scheduleStep(st, this.step, this.nextTime, stepDur);
       this.nextTime += stepDur * (st.style === 'lofi' && this.step % 2 === 0 ? 1.12 : st.style === 'lofi' ? 0.88 : 1);
       this.step = (this.step + 1) % 256;
+      if (this.step % 16 === 0 && st !== TITLE && this.on && ++this.bars % BARS_PER_SONG === 0) this.nextSong();
     }
   }
 
   scheduleStep(st, step, t, sd) {
     const s = step % 16, bar = Math.floor(step / 16) % 4;
     const chord = st.prog[bar];
-    const root = st.root;
     const pat = this.patternFor(st);
+    const root = st.root + pat.shift;
     const bus = this.bus;
     const style = st.style;
     // drums

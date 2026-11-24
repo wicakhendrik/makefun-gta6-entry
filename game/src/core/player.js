@@ -30,9 +30,14 @@ export class PlayerController {
     let idx = owned.indexOf(p.weapon);
     if (inp.wheel > 0 || inp.pressed('KeyE')) idx = (idx + 1) % owned.length;
     if (inp.wheel < 0 || inp.pressed('KeyQ')) idx = (idx - 1 + owned.length) % owned.length;
-    for (let k = 1; k <= 5; k++) {
-      if (inp.pressed('Digit' + k)) { const w = WEAPON_ORDER[k - 1]; if (owned.includes(w)) idx = owned.indexOf(w); }
+    for (let k = 1; k <= WEAPON_ORDER.length; k++) {
+      if (inp.pressed('Digit' + k)) {
+        const w = WEAPON_ORDER[k - 1];
+        if (owned.includes(w)) idx = owned.indexOf(w);
+        else { this.game.hud.toast(`${WEAPONS[w].name} is locked — find it at Bolt & Barrel`); this.game.audio.dryFire(); }
+      }
     }
+    if (inp.pressed('KeyR')) this.game.combat.startReload(p);
     const next = owned[Math.max(0, idx)];
     if (next !== p.weapon) { p.weapon = next; this.game.audio.weaponSwitch(); this.game.hud.flashWeapon(); }
   }
@@ -72,7 +77,8 @@ export class PlayerController {
     const g = this.game, p = this.p;
     if (this.shotTimer > 0) this.shotTimer -= dt;
     const w = WEAPONS[p.weapon];
-    if (p.vehicle && (w.melee || w.pellets > 1 || p.weapon === 'rifle')) return; // drive-by: pistol and SMG only
+    g.combat.updateReload(p, dt);
+    if (p.vehicle && (w.melee || w.pellets !== 1 || p.weapon === 'rifle')) return; // drive-by: pistol and SMG only
     const trigger = w.auto ? inp.buttons[0] : inp.clicks[0];
     if (!trigger || p.fireCooldown > 0) return;
     if (!inp.locked && !g.shotMode && g.input.wantLock) return;
@@ -85,7 +91,7 @@ export class PlayerController {
     if (!p.vehicle) p.heading = g.camera.yaw;
     if (g.combat.fire(p, ox, oy, oz, dx, dy, dz, mx, my, mz)) {
       this.shotTimer = 0.8;
-      if (!w.melee) g.camera.shake(w.pellets > 1 ? 0.25 : 0.06);
+      if (!w.melee) g.camera.shake(w.pellets > 1 || w.rocket ? 0.25 : 0.06);
     }
   }
 

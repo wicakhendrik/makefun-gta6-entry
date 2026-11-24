@@ -17,11 +17,14 @@ import { PlayerController } from './player.js';
 import { writeSave, readSave, applySave, loadSettings, saveSettings } from './save.js';
 import { Effects } from '../fx/effects.js';
 import { CombatSystem } from '../combat/combat.js';
+import { RocketSystem } from '../combat/rockets.js';
 import { TrafficSystem } from '../systems/traffic.js';
 import { PedestrianSystem } from '../systems/pedestrians.js';
 import { PoliceSystem } from '../systems/police.js';
 import { GangSystem } from '../systems/gangs.js';
 import { resolveVehicleHumanContacts } from '../systems/contacts.js';
+import { CrewSystem } from '../systems/crew.js';
+import { RespectSystem } from '../systems/respect.js';
 import { MissionSystem } from '../story/missions.js';
 import { ActivitySystem } from '../story/activities.js';
 import { TaxiJobs } from '../story/taxi.js';
@@ -48,6 +51,7 @@ export class Game {
     this.radio = new Radio(this.audio);
     this.fx = new Effects();
     this.combat = new CombatSystem(this);
+    this.rockets = new RocketSystem(this);
     this.time = 0;
     this.hour = 17.4;
     this.money = 0;
@@ -63,11 +67,14 @@ export class Game {
     this.missions = new MissionSystem(this);
     this.activities = new ActivitySystem(this);
     this.taxi = new TaxiJobs(this);
+    this.crew = new CrewSystem(this);
+    this.respect = new RespectSystem(this);
     this.hud = new Hud(this, hudCanvas);
     this.menus = new MenuSystem(this);
     this.playerCtl = new PlayerController(this);
     this.player.controller = this.playerCtl;
     this.radio.onChange = (st) => this.hud.showStation(st);
+    this.radio.onSong = (np) => this.hud.showSong(np);
     this.accum = 0;
     this.deathTimer = 0;
     this.ferrisAngle = 0;
@@ -149,6 +156,8 @@ export class Game {
     this.vehicles = [];
     this.humans = [this.player];
     this.fx = new Effects();
+    this.rockets.list = [];
+    this.crew = new CrewSystem(this);
     this.police.clear();
     this.police.heli = null;
     this.missions.active = null;
@@ -156,7 +165,7 @@ export class Game {
     this.taxi.active = false; this.taxi.fare = null;
     this.traffic.spawnParked();
     const p = this.player;
-    Object.assign(p, { hp: 100, armor: 0, state: 'walk', vehicle: null, vx: 0, vz: 0, y: 0, weapon: 'fist' });
+    Object.assign(p, { hp: 100, armor: 0, state: 'walk', vehicle: null, vx: 0, vz: 0, y: 0, weapon: 'fist', clip: {}, reloading: 0 });
   }
 
   newGame() {
@@ -167,6 +176,7 @@ export class Game {
     this.activities.exported = new Set();
     this.activities.tokens = new Set();
     this.activities.bestTimes = {};
+    this.respect.points = 0;
     Object.assign(this.stats, { kills: 0, stolen: 0, wrecked: 0, driven: 0, walked: 0, missions: 0 });
     const p = this.player;
     p.weapons = new Set(); p.ammo = {};
@@ -332,6 +342,8 @@ export class Game {
     this.missions.update(dt);
     this.activities.update(dt);
     this.taxi.update(dt);
+    this.rockets.update(dt);
+    this.crew.update(dt);
     // drop anyone whose physics went non-finite rather than letting NaN spread
     this.humans = this.humans.filter((h) => (!h.gone && Number.isFinite(h.x) && Number.isFinite(h.z)) || h === p);
     this.vehicles = this.vehicles.filter((v) => Number.isFinite(v.x) && Number.isFinite(v.z));
@@ -370,6 +382,8 @@ export class Game {
     this.fx.emitLights(r);
     this.police.renderSirens(r, right, upN);
     this.addStreetLights(r, env, right, upN);
+    this.rockets.render(r, right, upN);
+    this.police.renderSpotlight(r, env, right, upN);
     this.fx.render(r, right, upN);
     this.missions.render(r, right, upN);
     if (this.state !== 'title') { this.activities.render(r, right, upN); this.taxi.render(r, right, upN); }

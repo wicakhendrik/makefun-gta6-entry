@@ -25,6 +25,7 @@ export function writeSave(game) {
     tokens: [...game.activities.tokens],
     bestTimes: game.activities.bestTimes,
     stats: game.stats,
+    respect: game.respect.points,
   };
   try { s.setItem(SAVE_KEY, JSON.stringify(data)); return true; } catch (e) { return false; }
 }
@@ -52,6 +53,8 @@ export function applySave(game, data) {
   game.activities.tokens = new Set(data.tokens || []);
   game.activities.bestTimes = data.bestTimes || {};
   Object.assign(game.stats, data.stats || {});
+  game.respect.points = data.respect || 0;
+  p.clip = {};
 }
 
 export function loadSettings() {

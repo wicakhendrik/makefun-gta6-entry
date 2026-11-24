@@ -3,13 +3,24 @@
 import { rayBox } from '../world/collision.js';
 
 export const WEAPONS = {
-  fist: { name: 'Fists', melee: true, dmg: 16, rate: 0.42, range: 1.8 },
-  pistol: { name: 'Hornet 9', dmg: 30, rate: 0.24, spread: 0.012, range: 120, pellets: 1, sound: 'pistol', price: 400, ammoPack: 36 },
-  smg: { name: 'Wasp MP', dmg: 17, rate: 0.075, spread: 0.04, range: 90, pellets: 1, auto: true, sound: 'smg', price: 1500, ammoPack: 90 },
-  shotgun: { name: 'Mako 12', dmg: 16, rate: 0.85, spread: 0.085, range: 45, pellets: 8, sound: 'shotgun', price: 2200, ammoPack: 16 },
-  rifle: { name: 'Sable AR', dmg: 32, rate: 0.11, spread: 0.016, range: 170, pellets: 1, auto: true, sound: 'rifle', price: 4500, ammoPack: 60 },
+  fist: { name: 'Fists', melee: true, dmg: 16, rate: 0.42, range: 1.8, slot: 1 },
+  bat: { name: 'Gaff Bat', melee: true, dmg: 42, rate: 0.6, range: 2.4, slot: 2, knock: 6, price: 250 },
+  pistol: { name: 'Hornet 9', dmg: 30, rate: 0.24, spread: 0.012, range: 120, pellets: 1, sound: 'pistol', price: 400, ammoPack: 36, clip: 12, reload: 1.1, slot: 3 },
+  smg: { name: 'Wasp MP', dmg: 17, rate: 0.075, spread: 0.04, range: 90, pellets: 1, auto: true, sound: 'smg', price: 1500, ammoPack: 90, clip: 30, reload: 1.5, slot: 4 },
+  shotgun: { name: 'Mako 12', dmg: 16, rate: 0.85, spread: 0.085, range: 45, pellets: 8, sound: 'shotgun', price: 2200, ammoPack: 16, clip: 6, reload: 2.2, slot: 5 },
+  rifle: { name: 'Sable AR', dmg: 32, rate: 0.11, spread: 0.016, range: 170, pellets: 1, auto: true, sound: 'rifle', price: 4500, ammoPack: 60, clip: 30, reload: 1.8, slot: 6 },
+  launcher: { name: 'Pelican RL', dmg: 0, rate: 1.1, spread: 0.004, range: 220, pellets: 0, rocket: true, sound: 'rocket', price: 9000, ammoPack: 4, clip: 1, reload: 1.6, slot: 7 },
 };
-export const WEAPON_ORDER = ['fist', 'pistol', 'smg', 'shotgun', 'rifle'];
+export const WEAPON_ORDER = ['fist', 'bat', 'pistol', 'smg', 'shotgun', 'rifle', 'launcher'];
+
+/** Rounds loaded in the current clip (the rest of p.ammo is the reserve). */
+export function clipOf(h, w) {
+  const spec = WEAPONS[w];
+  if (!spec || !spec.clip || !h.ammo) return 0;
+  if (!h.clip) h.clip = {};
+  if (h.clip[w] === undefined) h.clip[w] = Math.min(spec.clip, h.ammo[w] || 0);
+  return Math.min(h.clip[w], h.ammo[w] || 0);
+}
 
 export class CombatSystem {
   constructor(game) {
@@ -25,13 +36,22 @@ export class CombatSystem {
     if (!w || shooter.fireCooldown > 0) return false;
     if (w.melee) return this.melee(shooter);
     if (shooter.ammo) {
+      if (shooter.reloading > 0) return false;
       if ((shooter.ammo[shooter.weapon] || 0) <= 0) { this.game.audio.dryFire(); shooter.fireCooldown = 0.3; return false; }
+      if (clipOf(shooter, shooter.weapon) <= 0) { this.startReload(shooter); return false; }
       shooter.ammo[shooter.weapon]--;
+      shooter.clip[shooter.weapon]--;
+      if (shooter.clip[shooter.weapon] <= 0 && shooter.ammo[shooter.weapon] > 0) this.startReload(shooter);
     }
     shooter.fireCooldown = w.rate;
     const g = this.game;
     g.fx.muzzle(mx, my, mz);
     g.audio.gunshot(w.sound, mx, mz, shooter.isPlayer);
+    if (w.rocket) {
+      g.rockets.launch(shooter, mx, my, mz, dx, dy, dz);
+      g.events.emit('gunfire', shooter, ox, oz);
+      return true;
+    }
     for (let k = 0; k < w.pellets; k++) {
       const s = w.spread * (shooter.isPlayer ? (g.camera.aiming ? 0.5 : 1) : 1);
       let ex = dx + (Math.random() - 0.5) * 2 * s, ey = dy + (Math.random() - 0.5) * 2 * s, ez = dz + (Math.random() - 0.5) * 2 * s;
@@ -59,6 +79,28 @@ export class CombatSystem {
     }
     g.events.emit('gunfire', shooter, ox, oz);
     return true;
+  }
+
+  /** Begin reloading the shooter's current weapon; the clip refills when the timer runs out. */
+  startReload(h) {
+    const w = WEAPONS[h.weapon];
+    if (!w || !w.clip || h.reloading > 0) return;
+    const loaded = clipOf(h, h.weapon), have = h.ammo[h.weapon] || 0;
+    if (loaded >= Math.min(w.clip, have)) return;
+    h.reloading = w.reload;
+    h.reloadWeapon = h.weapon;
+    if (h.isPlayer) this.game.audio.reload();
+  }
+
+  /** Tick the reload timer and refill the clip from the reserve. */
+  updateReload(h, dt) {
+    if (!(h.reloading > 0)) return;
+    if (h.reloadWeapon !== h.weapon) { h.reloading = 0; return; }
+    h.reloading -= dt;
+    if (h.reloading <= 0) {
+      h.reloading = 0;
+      h.clip[h.weapon] = Math.min(WEAPONS[h.weapon].clip, h.ammo[h.weapon] || 0);
+    }
   }
 
   /** Nearest thing a ray meets: a person (vertical capsule), a car (oriented box) or the static world. */
@@ -116,9 +158,10 @@ export class CombatSystem {
 
   melee(shooter) {
     const g = this.game;
-    shooter.fireCooldown = WEAPONS.fist.rate;
+    const w = WEAPONS[shooter.weapon] && WEAPONS[shooter.weapon].melee ? WEAPONS[shooter.weapon] : WEAPONS.fist;
+    shooter.fireCooldown = w.rate;
     shooter.punch = 0.25;
-    let target = null, bestD = WEAPONS.fist.range;
+    let target = null, bestD = w.range;
     for (const h of g.humans) {
       if (h === shooter || !h.onFoot) continue;
       const d = Math.hypot(h.x - shooter.x, h.z - shooter.z);
@@ -126,9 +169,10 @@ export class CombatSystem {
     }
     g.audio.swing();
     if (target) {
-      target.takeDamage(WEAPONS.fist.dmg, g, shooter, 'melee');
+      target.takeDamage(w.dmg, g, shooter, 'melee');
       const fx = Math.sin(shooter.heading), fz = Math.cos(shooter.heading);
-      if (target.state !== 'dead') { target.vx += fx * 3; target.vz += fz * 3; }
+      if (w.knock && target.state !== 'dead') target.knock(fx * w.knock, fz * w.knock, 2.5, g);
+      else if (target.state !== 'dead') { target.vx += fx * 3; target.vz += fz * 3; }
       else target.knock(fx * 4, fz * 4, 2, g);
       g.audio.punch(target.x, target.z);
       if (shooter.isPlayer) g.events.emit('playerHit', target, false);

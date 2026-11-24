@@ -28,6 +28,8 @@ export const SHOP_ITEMS = [
   { id: 'smg', label: 'Wasp MP submachine gun / +90 ammo', price: 1500, ammo: 300 },
   { id: 'shotgun', label: 'Mako 12 shotgun / +16 shells', price: 2200, ammo: 300 },
   { id: 'rifle', label: 'Sable AR rifle / +60 ammo', price: 4500, ammo: 400 },
+  { id: 'bat', label: 'Gaff Bat (heavy melee)', price: 250, ammo: 0 },
+  { id: 'launcher', label: 'Pelican RL launcher / +4 rockets', price: 9000, ammo: 1200 },
 ];
 
 export class ActivitySystem {
@@ -157,6 +159,7 @@ export class ActivitySystem {
     const g = this.game, p = g.player;
     this.exported.add(v.type);
     g.money += v.spec.value;
+    g.events.emit('carExported', v);
     g.player.controller.exitVehicle();
     v.dead = true; v.persistent = false;
     g.vehicles = g.vehicles.filter((o) => o !== v);
@@ -258,6 +261,7 @@ export class ActivitySystem {
     if (!best || t < best) this.bestTimes[r.def.id] = t;
     if (pos === 1) {
       g.money += r.def.reward;
+      g.events.emit('raceWon', r.def);
       g.hud.bigMessage('RACE WON', `${r.def.name}  ${t.toFixed(1)}s  +$${r.def.reward}`, '#ffd24a');
       g.audio.missionPassed();
     } else {
