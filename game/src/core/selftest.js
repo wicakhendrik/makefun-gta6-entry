@@ -174,12 +174,12 @@ export function runSelfTest(g) {
   // 8c. crew abilities and street rank
   g.police.setMinStars(2);
   const s0 = g.police.stars, cash0 = g.money;
-  press(g, 'KeyX'); run(g, 0.05);
+  press(g, 'KeyX'); g.crew.handleKeys(); run(g, 0.05);
   log('Teo bribe: stars', s0, '->', g.police.stars, 'cost', cash0 - g.money, 'cooldown', Math.round(g.crew.cool.teo));
   const s1 = g.police.stars;
-  press(g, 'KeyX'); run(g, 0.05);
+  press(g, 'KeyX'); g.crew.handleKeys(); run(g, 0.05);
   log('Teo again while busy: stars stay', s1 === g.police.stars);
-  p.armor = 10; press(g, 'KeyC'); run(g, 0.05);
+  p.armor = 10; press(g, 'KeyC'); g.crew.handleKeys(); run(g, 0.05);
   log('Nyla supply drop armor', p.armor);
   const rk = g.crew.rank();
   log('rank', rk.level, rk.name, rk.rp, 'RP', 'next at', rk.to);

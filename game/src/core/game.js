@@ -283,6 +283,7 @@ export class Game {
     if (this.input.hits.size || this.input.clicks[0]) this.audio.unlock();
     if (this.state === 'title' && this.audio.ctx && !this.radio.on) this.radio.playTitle();
     this.handleGlobalKeys();
+    this.crew.handleKeys();
     this.menus.update();
     if ((this.state === 'playing' || this.state === 'dead') && !this.frozen) {
       this.accum += dt;

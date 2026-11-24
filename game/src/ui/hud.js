@@ -156,7 +156,11 @@ export class Hud {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.w, this.h);
     if (!this.visible || g.state === 'title') return;
-    const W = this.w, H = this.h;
+    // the layout is made for 1240x700 and up; smaller windows scale the whole HUD down so panels never overlap
+    const k = Math.min(1, this.w / 1240, this.h / 700);
+    ctx.setTransform(this.dpr * k, 0, 0, this.dpr * k, 0, 0);
+    const W = this.w / k, H = this.h / k;
+    this.lh = H;
 
     // cinematic vignette
     const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.72);
@@ -598,8 +602,8 @@ export class Hud {
     const ctx = this.ctx;
     ctx.save();
     ctx.textAlign = 'center';
-    if (r.time < 0) outlined(ctx, String(Math.ceil(-r.time)), W / 2, this.h / 2 - 40, `90px ${DISPLAY}`, '#ffd24a');
-    else if (r.time < 1) outlined(ctx, 'GO!', W / 2, this.h / 2 - 40, `90px ${DISPLAY}`, '#7dffb0');
+    if (r.time < 0) outlined(ctx, String(Math.ceil(-r.time)), W / 2, this.lh / 2 - 40, `90px ${DISPLAY}`, '#ffd24a');
+    else if (r.time < 1) outlined(ctx, 'GO!', W / 2, this.lh / 2 - 40, `90px ${DISPLAY}`, '#7dffb0');
     roundRect(ctx, W / 2 - 150, 20, 300, 56, 10); ctx.fillStyle = 'rgba(8,10,20,0.6)'; ctx.fill();
     const pos = this.game.activities.racePosition();
     outlined(ctx, `${r.def.name.toUpperCase()}   POS ${pos}/4`, W / 2, 44, `16px ${DISPLAY}`, '#4ab8ff');

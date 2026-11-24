@@ -67,9 +67,13 @@ export class CrewSystem {
   reset() { this.cool = {}; this.flash = {}; }
 
   update(dt) {
-    const g = this.game;
     for (const k of Object.keys(this.cool)) this.cool[k] = Math.max(0, this.cool[k] - dt);
     for (const k of Object.keys(this.flash)) this.flash[k] = Math.max(0, this.flash[k] - dt);
+  }
+
+  /** Hotkeys, read once per rendered frame (the simulation may step several times in one frame). */
+  handleKeys() {
+    const g = this.game;
     if (g.state !== 'playing' || !g.player.alive) return;
     for (const c of CREW) if (g.input.pressed(c.key)) this.use(c.id);
   }
